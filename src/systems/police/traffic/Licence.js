@@ -1,6 +1,7 @@
 // Driving licence with "klip" (clips). Stored in state.licence = { clips, banLeft, decayT } (saved with the game; loadSave spreads unknown keys).
 import { bus } from '../../../core/events.js';
 import { POLICE_EV } from '../tuning.js';
+import { opt } from '../../../core/options.js';
 import { RULES as R } from './config.js';
 
 export class Licence {
@@ -13,10 +14,10 @@ export class Licence {
 
   get() {
     const s = this.s;
-    return { clips: s.clips, maxClips: R.CLIPS_TO_BAN, banned: s.banLeft > 0, banLeft: Math.max(0, s.banLeft) };
+    return { clips: s.clips, maxClips: R.CLIPS_TO_BAN, banned: this.banned, banLeft: this.banned ? Math.max(0, s.banLeft) : 0 };
   }
 
-  get banned() { return this.s.banLeft > 0; }
+  get banned() { return this.s.banLeft > 0 && !opt('noDrivingBan'); }
 
   _emit(reason) { bus.emit(POLICE_EV.LICENCE, { ...this.get(), reason }); }
 
@@ -24,7 +25,7 @@ export class Licence {
   addClips(n) {
     if (!n || this.banned) return false;
     this.s.clips += n; this.s.decayT = 0;
-    if (this.s.clips >= R.CLIPS_TO_BAN) {
+    if (this.s.clips >= R.CLIPS_TO_BAN && !opt('noDrivingBan')) { // noDrivingBan: clips keep counting, a ban never starts
       this.s.clips = 0; this.s.banLeft = R.BAN_SECONDS;
       this._emit('ban');
       return true;

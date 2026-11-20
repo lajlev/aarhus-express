@@ -10,6 +10,7 @@
 import { PX } from '../../../config.js';
 import { bus, listen, pager } from '../../../core/events.js';
 import { TUNING, LEVELS, COURIER, CHAIN_RE } from '../../../data/missions.js';
+import { TASKS } from '../../../data/tasks.js';
 import { POLICE_EV } from '../../police/tuning.js';
 import { JOBS_EV } from '../events.js';
 import { rnd, pick, dist, clamp, levelInfo, addXp, routeMetres, streetName } from './shared.js';
@@ -28,7 +29,6 @@ export class Courier {
     const seen = new Set();
     this.pool = w.pois.filter((p) => (p.k === 'food' || p.k === 'cafe') && p.n && !CHAIN_RE.test(p.n) && !seen.has(p.n) && seen.add(p.n));
     this.hubs = COURIER.hubs.map((id) => w.landmark(id)).filter(Boolean);
-    this._dmg = 0;
     listen(this.ctx.scene, POLICE_EV.TICKET, (t) => this.onTicket(t));
   }
 
@@ -62,7 +62,7 @@ export class Courier {
     return Math.round(r);
   }
 
-  _gen() {
+  _gen(area = null) {
     const ctx = this.ctx, w = ctx.world, pl = ctx.player, g = w.drive;
     if (!pl || !this.pool.length || !g) return null;
     const L = this.level, maxM = COURIER.maxMetres[L - 1];
@@ -70,11 +70,13 @@ export class Courier {
     for (let attempt = 0; attempt < 6; attempt++) {
       const widen = 1 + attempt * 0.6;
       const slow = !pl.vehicle || pl.vehicle.def?.bike; // on foot or on a bike: shorter pickups
-      const lo = COURIER.pickupRangeM[0] * PX, hi = (slow ? COURIER.pickupRangeBikeM * (1 + attempt * 0.15) : COURIER.pickupRangeM[1] * widen) * PX;
+      let lo = COURIER.pickupRangeM[0] * PX, hi = (slow ? COURIER.pickupRangeBikeM * (1 + attempt * 0.15) : COURIER.pickupRangeM[1] * widen) * PX;
+      if (area) { lo = 40 * PX; hi = 1900 * PX; } // an event pulls orders from its whole area
       const cand = [];
       let tot = 0;
       for (const p of this.pool) {
         if (used.has(p.n)) continue;
+        if (area && !area.global && Math.hypot(p.x - area.x, p.y - area.y) > area.r) continue;
         const d = Math.hypot(p.x - pl.px, p.y - pl.py);
         if (d < lo || d > hi) continue;
         let wgt = 1;
@@ -97,10 +99,11 @@ export class Courier {
         const item = pick(COURIER.items);
         const size = L >= 3 && Math.random() < 0.3 ? 2 + Math.floor(Math.random() * (COURIER.sizeMax[L - 1] - 1)) : 1;
         const fragile = COURIER.fragile.includes(item);
+        const ev = ctx.systems.missions.board?.eventAt(from.x, from.y) || null;
         return {
           id: nextOfferId++, from: { x: from.x, y: from.y, name: from.n, kind: from.k },
           to: { x: dx, y: dy, name: addr, street }, item, size, fragile, metres,
-          reward: this.rewardFor(metres, size, fragile), life: rnd(...COURIER.offerLife),
+          reward: Math.round(this.rewardFor(metres, size, fragile) * (ev ? 1 + ev.pay : 1)), life: rnd(...COURIER.offerLife), event: ev ? ev.name : null,
         };
       }
     }
@@ -121,14 +124,21 @@ export class Courier {
       if (this.offers[i].life <= 0) { this.offers.splice(i, 1); changed = true; }
     }
     this._t -= dt;
-    const want = this.targetCount();
+    const board = this.careers.missions.board;
+    const evs = board ? board.activeEvents() : [];
+    const near = evs.filter((e) => e.global || Math.hypot(e.x - this.ctx.player.px, e.y - this.ctx.player.py) < 1900 * PX);
+    const want = this.targetCount() + (evs.some((e) => e.global) ? 1 : 0) + (near.some((e) => !e.global) ? TASKS.courierEventBoostOffers : 0);
     if (this._boot) {
       this._boot = false;
       for (let i = 0; i < Math.min(3, want); i++) { const o = this._gen(); if (o) { this.offers.push(o); changed = true; } }
       this._t = rnd(...COURIER.offerEvery);
     } else if (this._t <= 0) {
-      this._t = rnd(...COURIER.offerEvery);
-      if (this.offers.length < want) { const o = this._gen(); if (o) { this.offers.push(o); changed = true; } }
+      this._t = rnd(...COURIER.offerEvery) * (near.length ? 0.6 : 1);
+      if (this.offers.length < want) {
+        const area = near.find((e) => !e.global && this.offers.filter((q) => q.event === e.name).length < 2) || null;
+        const o = this._gen(area);
+        if (o) { this.offers.push(o); changed = true; }
+      }
       else if (this.offers.length > want) { this.offers.shift(); changed = true; }
     }
     if (changed) bus.emit(JOBS_EV.OFFERS, { offers: this.offers });
@@ -166,13 +176,12 @@ export class Courier {
     const m = this.careers.missions;
     const i = this.offers.findIndex((o) => o.id === id);
     if (i < 0) return { ok: false, reason: 'That order is gone' };
-    if (m.job || m.offer) return { ok: false, reason: 'Finish your current job first' };
-    if (this.careers.shiftActive()) return { ok: false, reason: 'End your shift first' };
+    const can = m.canAccept({ kind: 'order', career: 'courier' });
+    if (!can.ok) return can;
     const o = this.offers[i];
     this.offers.splice(i, 1);
     this._decide(true);
-    this._dmg = 0;
-    m.startJob(this.buildJob(o));
+    if (!m.startJob(this.buildJob(o))) return { ok: false, reason: 'Cannot take this order now' };
     bus.emit(JOBS_EV.OFFERS, { offers: this.offers });
     return { ok: true };
   }
@@ -185,7 +194,7 @@ export class Courier {
     const nav = ctx.systems?.economy?.getEffects?.().timeLimit ?? 1;
     const limit = Math.round(((o.metres / speed) * TUNING.timeSlack + TUNING.timeBase + TUNING.stopSeconds) * LEVELS[lvl - 1].timeMul * nav);
     return {
-      id: `bybud${o.id}`, kind: 'order', career: 'courier', title: `Bybud: ${o.item}`, legal: true, level: lvl, state: 'offered',
+      id: `bybud${o.id}`, kind: 'order', career: 'courier', persist: true, short: `${o.item}: ${o.to.street}`, event: o.event || null, title: `Bybud: ${o.item}`, legal: true, level: lvl, state: 'offered',
       stageIndex: 0, timeLeft: null, timeLimit: limit, timerFrom: 1, timerTo: 2, reward: o.reward, metres: o.metres,
       cargo: { size: o.size, fragile: o.fragile, name: o.item }, damage: 0, loaded: false, offerId: o.id,
       stages: [
@@ -195,8 +204,6 @@ export class Courier {
     };
   }
 
-  onDamaged(amount) { this._dmg += amount; }
-
   /** A courier job (or a lunch-rush contact job) ended. */
   onJobEnd(j, ok, info = {}) {
     if (j.career !== 'courier') { if (ok && j.template === 'foodRush') addXp(this.ctx, 'courier', 12 + j.metres / 60); return; }
@@ -204,7 +211,7 @@ export class Courier {
     let score;
     if (ok) {
       const frac = clamp(info.frac ?? 0.5, 0, 1);
-      score = 3.5 + 1.5 * Math.min(1, frac * 1.6) - Math.min(2, (this._dmg / (maxHp * 0.5)) * 2);
+      score = 3.5 + 1.5 * Math.min(1, frac * 1.6) - Math.min(2, ((j.dmgTaken || 0) / (maxHp * 0.5)) * 2);
       if (j.cargo.fragile) score -= 2 * (1 - clamp(info.integ ?? 1, 0, 1));
       st.done++;
       st.earned += info.payout || 0;

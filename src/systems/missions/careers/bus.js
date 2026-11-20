@@ -76,7 +76,8 @@ export class BusCareer {
     const ctx = this.ctx, m = this.careers.missions, w = ctx.world;
     if (!this.st.signed) return { ok: false, reason: 'Sign up first' };
     if (this.careers.shiftActive()) return { ok: false, reason: 'You are already on a shift' };
-    if (m.job || m.offer) return { ok: false, reason: 'Finish your current job first' };
+    const can = m.canAccept({ kind: 'shift', career: 'bus' });
+    if (!can.ok) return can;
     const route = w.getBusRoutes()[routeIdx];
     if (!route) return { ok: false, reason: 'Unknown route' };
     const all = w.getBusStops();
@@ -92,7 +93,7 @@ export class BusCareer {
     for (let i = 1; i < stops.length; i++) sched.push(sched[i - 1] + routeMetres(w, stops[i - 1], stops[i]) / BUS.avgMps + BUS.dwellSeconds);
     const level = this.level;
     const job = {
-      id: `bus${nextShift++}`, kind: 'shift', career: 'bus', shift: true, title: `Linje ${route.ref}: ${route.from} - ${route.to}`, legal: true, level: clamp(Math.ceil(level / 2), 1, 3),
+      id: `bus${nextShift++}`, kind: 'shift', career: 'bus', shift: true, short: `Bus ${route.ref}`, title: `Linje ${route.ref}: ${route.from} - ${route.to}`, legal: true, level: clamp(Math.ceil(level / 2), 1, 3),
       state: 'offered', stageIndex: 0, timeLeft: null, timeLimit: Math.round(sched[sched.length - 1]), timerFrom: 1e9, timerTo: 1e9, reward: 0, metres: 0,
       cargo: { size: 0, fragile: false, name: 'Passengers' }, damage: 0, loaded: true,
       stages: [
@@ -194,7 +195,7 @@ export class BusCareer {
     const s = this.shift;
     if (!s) return;
     const v = s.vehicle, j = s.job;
-    if (this.careers.missions.job !== j) { this._finish(false, 'shift ended', true); return; } // job ended elsewhere
+    if (!this.careers.missions.jobs.includes(j)) { this._finish(false, 'shift ended', true); return; } // job ended elsewhere
     if (!ctx.vehicles.includes(v) || v.state === 'wreck' || v.state === 'sunk') { this._finish(false, 'the bus was lost'); return; }
     const inBus = pl.vehicle === v;
     if (j.stageIndex === 0) {

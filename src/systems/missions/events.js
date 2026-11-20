@@ -23,3 +23,13 @@ export const JOBS_EV = {
   LEVEL_UP: 'jobs:levelUp', //            { career, level }
   RATING: 'jobs:rating', //               { rating }                         courier rating changed (1..5)
 };
+
+// Task events (namespaced 'tasks:'), emitted by the TaskBoard (systems/missions/tasks/TaskBoard.js).
+export const TASKS_EV = {
+  CHANGED: 'tasks:changed', //             { }                                the active list, tracked task or board changed (HUD/app refresh)
+  TRACKED: 'tasks:tracked', //             { job }                            the tracked task changed (Tab or auto)
+  GIG_SPAWNED: 'tasks:gigSpawned', //      { gig }                            a street gig appeared on the board
+  EVENT_STARTED: 'tasks:eventStarted', //  { event }                          a city event began (announced on the pager and as a HUD banner)
+  EVENT_ENDED: 'tasks:eventEnded', //      { event }
+  CHALLENGE_OFFERED: 'tasks:challengeOffered', // { challenge }                a quick challenge was offered
+};

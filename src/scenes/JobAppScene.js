@@ -1,6 +1,7 @@
 // JobAppScene: phone job app overlay (J). OWNER: JOBS specialist.
 //
-// Opened with J (GameScene pauses Game and hides the HUD like Overlay). Three career tabs:
+// Opened with J (GameScene pauses Game and hides the HUD like Overlay). Four tabs (the fourth is TASKS: the active list with
+// track / abandon, plus a "Nearby" list of gigs, courier offers, taxi stands, bus lines, events and challenges with accept):
 //   Courier ("Bybud"): list of order offers from real Aarhus restaurants to home addresses; Enter accepts, D declines.
 //   Taxi (company taxi): sign up, start a shift (a taxi waits at the nearest stand), end it.
 //   Bus (real Aarhus routes): sign up, pick a route (list sorted by distance to its first stop), start a shift.
@@ -12,10 +13,13 @@ import { bus, EV } from '../core/events.js';
 import { C, S, txt, panel, ensureFonts, fmtKr, fmtTime } from '../ui/theme.js';
 import { GAME_W, GAME_H } from '../config.js';
 import { COURIER, TAXI, BUS, CAREER_NAMES } from '../data/missions.js';
+import { TASKS } from '../data/tasks.js';
 import { fmtMetres } from '../systems/missions/careers/shared.js';
+import { drawTaskIcon } from '../ui/taskIcons.js';
 
-const TABS = ['courier', 'taxi', 'bus'];
-const APPS = { courier: COURIER.appName, taxi: TAXI.company, bus: BUS.company };
+const TABS = ['courier', 'taxi', 'bus', 'tasks'];
+const APPS = { courier: COURIER.appName, taxi: TAXI.company, bus: BUS.company, tasks: 'Tasks' };
+const TAB_NAMES = { ...CAREER_NAMES, tasks: 'Tasks' };
 const W = 460, H = 668, ROWS = 5, ROW_H = 60;
 const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
@@ -30,8 +34,8 @@ export class JobAppScene extends Phaser.Scene {
     this.missions = this.ctx.systems.missions;
     this.careers = this.missions.careers;
     this.tab = 0;
-    this.sel = { courier: 0, taxi: 0, bus: 0 };
-    this.top = { courier: 0, taxi: 0, bus: 0 };
+    this.sel = { courier: 0, taxi: 0, bus: 0, tasks: 0 };
+    this.top = { courier: 0, taxi: 0, bus: 0, tasks: 0 };
     this.msg = '';
     this.add.rectangle(GAME_W / 2, GAME_H / 2, GAME_W, GAME_H, 0x05070b, 0.72);
     this.x0 = GAME_W / 2 - W / 2;
@@ -47,13 +51,14 @@ export class JobAppScene extends Phaser.Scene {
   rows() {
     const c = this.careers, k = TABS[this.tab];
     if (k === 'courier') {
-      const cap = this.ctx.player.capacity;
+      const cap = this.ctx.player.capacity - this.missions.capacityUsed();
       return c.courier.offers.map((o) => ({
         id: o.id, kind: 'offer', title: o.from.name,
         sub: `to ${o.to.name} · ${fmtMetres(c.courier.pickupMetres(o))} away · ${fmtMetres(o.metres)}${o.size > 1 ? ' · big' : ''}${o.fragile ? ' · fragile' : ''}`,
         warn: o.size > cap ? `needs capacity ${o.size}` : '', right: fmtKr(o.reward), life: o.life,
       }));
     }
+    if (k === 'tasks') return this.taskRows();
     if (k === 'taxi') {
       if (!c.taxi.signed) return [{ kind: 'signup', title: `Sign up with ${TAXI.company}`, sub: 'Free. A company taxi waits at the nearest stand.' }];
       if (c.taxi.shift) return [{ kind: 'end', title: c.taxi.shift.stage === 'return' ? 'Return the taxi to the stand' : 'End shift and return the taxi', sub: c.taxi.shift.stage === 'return' ? 'Drive back to the stand marker' : 'Finish the fare, then drive back' }];
@@ -82,10 +87,12 @@ export class JobAppScene extends Phaser.Scene {
 
     // tabs
     TABS.forEach((t, i) => {
-      const tx = x0 + 22 + i * 140, on = i === this.tab;
-      g.fillStyle(on ? C.orange : C.ink2, 1).fillRoundedRect(tx, y0 + 62, 132, 32, 16);
-      this.T(tx + 66, y0 + 69, `${i + 1}  ${CAREER_NAMES[t]}`, { size: 14, bold: true, color: on ? S.ink : S.muted, ox: 0.5 });
+      const tx = x0 + 22 + i * 104, on = i === this.tab;
+      g.fillStyle(on ? C.orange : C.ink2, 1).fillRoundedRect(tx, y0 + 62, 98, 32, 16);
+      this.T(tx + 49, y0 + 70, `${i + 1} ${TAB_NAMES[t]}`, { size: 13, bold: true, color: on ? S.ink : S.muted, ox: 0.5 });
     });
+
+    if (key === 'tasks') { this.renderTasks(g); return; }
 
     // career header: level, xp, rating
     const li = c.levelInfo(key);
@@ -138,7 +145,78 @@ export class JobAppScene extends Phaser.Scene {
     // footer
     const hint = key === 'courier' ? 'Up/Down choose · Enter accept · D decline · X abandon job' : 'Up/Down choose · Enter confirm · X abandon job';
     this.T(x0 + W / 2, y0 + H - 50, this.msg || hint, { size: 13, color: this.msg ? S.orange : S.muted, ox: 0.5 });
-    this.T(x0 + W / 2, y0 + H - 30, '1-3 or Left/Right career · Esc or J close', { size: 12, color: S.muted, ox: 0.5 });
+    this.T(x0 + W / 2, y0 + H - 30, '1-4 or Left/Right tabs · Esc or J close', { size: 12, color: S.muted, ox: 0.5 });
+  }
+
+  // ------------------------------------------------------------------ tasks tab
+  taskRows() {
+    const m = this.missions, rows = [];
+    for (const t of m.taskList()) {
+      rows.push({ kind: 'active', id: t.id, type: t.type, title: t.title, sub: `${t.stageName}${t.progress ? ` · ${t.progress}` : ''}${t.step && t.job && t.job.stages.length > 1 ? ` · step ${t.step}` : ''}`, tracked: t.tracked, job: t.job, pseudo: t.pseudo, timeLeft: t.timeLeft, tag: t.tracked ? 'TRACKED' : t.pseudo ? 'SHIFT' : 'ACTIVE', right: t.timeLeft != null ? fmtTime(t.timeLeft) : (t.reward ? fmtKr(t.reward) : '') });
+    }
+    for (const e of m.board.entries(true)) {
+      const d = e.dist == null ? '' : `${fmtMetres(e.dist)} · `;
+      rows.push({ kind: 'near', entry: e, type: e.type, title: e.title, sub: `${d}${e.sub}`, tag: e.act.toUpperCase(), right: e.pay ? fmtKr(e.pay) : '', boost: e.boost });
+    }
+    return rows;
+  }
+
+  renderTasks(g) {
+    const { x0, y0 } = this, m = this.missions;
+    const rows = this.rows();
+    const key = 'tasks';
+    const sel = Math.min(this.sel[key], Math.max(0, rows.length - 1));
+    this.sel[key] = sel;
+    const ROWS_T = 6;
+    let top = this.top[key];
+    if (sel < top) top = sel;
+    if (sel >= top + ROWS_T) top = sel - ROWS_T + 1;
+    this.top[key] = top;
+    const used = m.slotsUsed();
+    this.T(x0 + 28, y0 + 104, `${used}/${TASKS.maxActive} tasks`, { head: true, size: 22, color: used >= TASKS.maxActive ? S.orange : S.paper });
+    const tj = this.ctx.state.job;
+    this.T(x0 + W - 28, y0 + 110, tj ? `Tracking: ${cut(tj.short || tj.title, 24)}` : 'Nothing tracked', { size: 13, color: S.muted, ox: 1 });
+    // detail card of the selected row
+    const cy = y0 + 138, r = rows[sel];
+    g.fillStyle(C.ink2, 1).fillRoundedRect(x0 + 20, cy, W - 40, 74, 14);
+    if (r) {
+      let l1 = cut(r.title, 44), l2 = '', l3 = '', col = S.paper;
+      if (r.kind === 'active') {
+        l2 = cut(r.job?.blurb || r.sub, 62);
+        l3 = r.pseudo ? 'Shift: end it in its tab (2 or 3)' : `Abandon: ${m.abandonPenalty(r.job)}${r.job?.reward ? ` · pays ${fmtKr(r.job.reward)}` : ''}`;
+        col = r.tracked ? S.orange : S.paper;
+      } else {
+        const e = r.entry;
+        l2 = cut(e.job?.blurb || e.sub, 62);
+        const bits = [];
+        if (e.pay) bits.push(fmtKr(e.pay));
+        if (e.lq) bits.push(`+${e.lq} LQ`);
+        if (e.boost) bits.push(`boost: ${e.boost}`);
+        if (e.limit) bits.push(`${fmtTime(e.limit)} to do it`);
+        if (e.ttl) bits.push(`${fmtTime(e.ttl)} on the board`);
+        l3 = bits.join(' · ');
+      }
+      this.T(x0 + 34, cy + 8, l1, { bold: true, size: 15, color: col });
+      this.T(x0 + 34, cy + 30, l2, { size: 12, color: S.muted });
+      this.T(x0 + 34, cy + 50, l3, { size: 13, color: r.kind === 'active' ? S.red : S.green });
+    } else this.T(x0 + 34, cy + 26, 'Nothing here yet. Gigs appear around you every few seconds.', { size: 13, color: S.muted });
+    const ly = y0 + 222;
+    rows.slice(top, top + ROWS_T).forEach((q, i) => {
+      const ry = ly + i * (ROW_H + 4), on = top + i === sel;
+      g.fillStyle(on ? C.ink3 : C.ink2, 1).fillRoundedRect(x0 + 20, ry, W - 40, ROW_H, 12);
+      if (on) g.lineStyle(2, C.orange, 1).strokeRoundedRect(x0 + 20, ry, W - 40, ROW_H, 12);
+      if (q.tracked) g.fillStyle(C.orange, 1).fillRoundedRect(x0 + 20, ry + 8, 4, ROW_H - 16, 2);
+      drawTaskIcon(g, q.type, x0 + 46, ry + ROW_H / 2, 10);
+      this.T(x0 + 66, ry + 8, cut(q.title, q.right ? 30 : 38), { bold: true, size: 15, color: S.paper });
+      this.T(x0 + 66, ry + 32, cut(q.sub, 50), { size: 12, color: S.muted });
+      if (q.right) this.T(x0 + W - 34, ry + 8, q.right, { bold: true, size: 15, color: q.kind === 'active' && q.timeLeft != null ? (q.timeLeft < 15 ? S.red : q.timeLeft < 60 ? S.orange : S.paper) : S.gold, ox: 1 });
+      this.T(x0 + W - 34, ry + 34, q.tag, { size: 11, bold: true, color: q.kind === 'active' ? (q.tracked ? S.orange : S.muted) : q.boost ? S.gold : S.green, ox: 1 });
+    });
+    if (rows.length > ROWS_T) this.T(x0 + W - 28, ly + ROWS_T * (ROW_H + 4) - 2, `${sel + 1}/${rows.length}`, { size: 12, color: S.muted, ox: 1 });
+    const cur = rows[sel];
+    const hint = !cur ? 'Esc or J close' : cur.kind === 'active' ? 'Enter track · X abandon · Up/Down choose' : 'Enter accept · Up/Down choose';
+    this.T(x0 + W / 2, y0 + H - 50, this.msg || hint, { size: 13, color: this.msg ? S.orange : S.muted, ox: 0.5 });
+    this.T(x0 + W / 2, y0 + H - 30, '1-4 or Left/Right tabs · Esc or J close', { size: 12, color: S.muted, ox: 0.5 });
   }
 
   perk(key, lvl) {
@@ -149,7 +227,7 @@ export class JobAppScene extends Phaser.Scene {
 
   /** [headline, line 2, line 3, headline colour?] */
   status(key) {
-    const m = this.missions, c = this.careers, j = this.ctx.state.job;
+    const m = this.missions, c = this.careers, j = m.jobOfCareer(key);
     if (key === 'taxi' && c.taxi.shift) {
       const s = c.taxi.shift;
       const head = s.stage === 'toTaxi' ? 'Shift: get in your taxi' : s.stage === 'return' ? 'Shift: return the taxi' : 'On shift: waiting for fares';
@@ -163,11 +241,11 @@ export class JobAppScene extends Phaser.Scene {
     }
     if (j && j.career === key) {
       const st = j.stages[j.stageIndex];
-      return [cut(j.title, 38), `${j.stageIndex === 0 ? 'Pick up at' : 'Deliver to'} ${cut(st?.name || '', 34)}`, j.timeLeft != null ? `${fmtTime(j.timeLeft)} left · ${fmtKr(j.reward)}` : fmtKr(j.reward), S.green];
+      const more = key === 'courier' ? m.jobs.filter((q) => q.career === 'courier').length - 1 : 0;
+      return [cut(j.title, 38) + (more > 0 ? `  (+${more} more)` : ''), `${j.stageIndex === 0 ? 'Pick up at' : 'Deliver to'} ${cut(st?.name || '', 34)}`, j.timeLeft != null ? `${fmtTime(j.timeLeft)} left · ${fmtKr(j.reward)}` : fmtKr(j.reward), S.green];
     }
-    if (j) return ['Busy with another job', cut(j.title || '', 40), 'Finish or abandon it (X) first', S.orange];
     if (m.offer) return ['A job offer is waiting', 'Answer it with Y or N in the game', '', S.orange];
-    if (key === 'courier') return ['Online', 'Pick an order below', '', S.green];
+    if (key === 'courier') return ['Online', `Pick an order below · ${m.slotsUsed()}/${TASKS.maxActive} tasks`, '', S.green];
     const signed = c[key].signed;
     return [signed ? 'Off shift' : 'Not signed up', signed ? 'Start a shift to work' : 'Sign up to unlock this career', '', S.muted];
   }
@@ -177,14 +255,19 @@ export class JobAppScene extends Phaser.Scene {
     const k = e.code, key = TABS[this.tab];
     this.msg = '';
     if (k === 'Escape' || k === 'KeyJ') return this.close();
-    if (k === 'ArrowLeft' || (k === 'Tab' && e.shiftKey)) this.tab = (this.tab + 2) % 3;
-    else if (k === 'ArrowRight' || k === 'Tab') this.tab = (this.tab + 1) % 3;
+    if (k === 'ArrowLeft' || (k === 'Tab' && e.shiftKey)) this.tab = (this.tab + TABS.length - 1) % TABS.length;
+    else if (k === 'ArrowRight' || k === 'Tab') this.tab = (this.tab + 1) % TABS.length;
     else if (k === 'Digit1' || k === 'Numpad1') this.tab = 0;
     else if (k === 'Digit2' || k === 'Numpad2') this.tab = 1;
     else if (k === 'Digit3' || k === 'Numpad3') this.tab = 2;
+    else if (k === 'Digit4' || k === 'Numpad4') this.tab = 3;
     else if (k === 'ArrowUp') this.sel[key] = Math.max(0, this.sel[key] - 1);
     else if (k === 'ArrowDown') this.sel[key] = Math.min(Math.max(0, this.rows().length - 1), this.sel[key] + 1);
-    else if (k === 'KeyX') { if (this.ctx.state.job) { this.missions.abandon(); this.msg = 'Job abandoned'; } }
+    else if (k === 'KeyX') {
+      const r = key === 'tasks' ? this.rows()[this.sel[key]] : null;
+      if (key === 'tasks') { if (r?.kind === 'active' && r.job) { this.missions.abandon(r.job); this.msg = `Abandoned: ${this.missions.abandonPenalty(r.job)}`; } }
+      else if (this.ctx.state.job) { this.missions.abandon(); this.msg = 'Job abandoned'; }
+    }
     else if (k === 'KeyD' && key === 'courier') {
       const r = this.rows()[this.sel[key]];
       if (r) this.careers.courier.decline(r.id);
@@ -196,7 +279,9 @@ export class JobAppScene extends Phaser.Scene {
     const key = TABS[this.tab], r = this.rows()[this.sel[key]], c = this.careers;
     if (!r) return;
     let res = { ok: true };
-    if (r.kind === 'offer') res = c.courier.accept(r.id);
+    if (r.kind === 'active') { if (r.job) { this.missions.track(r.job); this.msg = `Tracking: ${r.job.short || r.job.title}`; } return; }
+    if (r.kind === 'near') res = this.missions.board.acceptEntry(r.entry);
+    else if (r.kind === 'offer') res = c.courier.accept(r.id);
     else if (r.kind === 'signup') { c[key].signUp(); this.msg = 'Signed up'; return; }
     else if (r.kind === 'start') res = c.taxi.startShift();
     else if (r.kind === 'route') res = c.bus.startShift(r.idx);

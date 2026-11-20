@@ -26,7 +26,7 @@ export function createInitialState(cityId, characterId, options) {
     cityId,
     characterId,
     // --- game options (lead only; see core/options.js). Set once at new-game time, persisted. ---
-    options: { theft: false, criminalMissions: false, mayhem: false, ...(options || {}) },
+    options: { theft: false, criminalMissions: false, mayhem: false, infiniteMoney: false, noDrivingBan: false, ...(options || {}) },
     // --- home: the rented basement room (data in data/home.js; rent/sleep logic is the HOME specialist's) ---
     // paidUntilDay: game day (economy clock) until which the rent is paid; the first week is prepaid.
     home: { id: 'basement', rentPerWeek: DEFAULT_RENT, paidUntilDay: 7, tier: 0, lateSince: null, evicted: false, remindedFor: null },
@@ -43,13 +43,14 @@ export function createInitialState(cityId, characterId, options) {
     // --- PoliceSystem ---
     heat: 0, // 0..5.99, level = floor(heat). Not restored on load (reset to 0).
     // --- MissionSystem ---
-    job: null, // active job; transient, not saved
+    job: null, // the TRACKED job (one of MissionSystem.jobs); transient, not saved
+    tasks: { tracked: null, active: [], events: [], cd: {} }, // active tasks (persisted jobs), city events and their cooldowns (saved)
     contactCooldowns: {}, // contactId -> timestamp (ms, game time)
     // --- GameScene / Player ---
     player: { x: null, y: null, health: 100 },
     ownedVehicles: options?.theft ? [] : ['bike'], // vehicle type ids the player owns; no-theft games start with their own city bike
     // --- shared counters (any module may increment its own counters) ---
-    stats: { deliveries: 0, missions: 0, stolen: 0, busted: 0, knockouts: 0, earned: 0, playSeconds: 0 },
+    stats: { deliveries: 0, missions: 0, gigs: 0, stolen: 0, busted: 0, knockouts: 0, earned: 0, playSeconds: 0 },
     savedAt: null,
   };
 }

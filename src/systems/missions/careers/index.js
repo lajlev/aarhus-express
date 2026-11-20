@@ -26,12 +26,11 @@ export class Careers {
     this.taxi = new Taxi(this);
     this.bus = new BusCareer(this);
     listen(this.ctx.scene, POLICE_EV.TICKET, () => {
-      const j = this.missions.job;
+      const j = this.missions.jobOfCareer('taxi');
       if (j?.passenger && j.loaded) j.ticketed = true; // a fine in front of the passenger cuts the tip
     });
     listen(this.ctx.scene, EV.VEHICLE_DAMAGED, ({ vehicle, amount }) => {
-      const j = this.missions.job;
-      if (j?.career === 'courier' && j.loaded && vehicle === this.ctx.player.vehicle) this.courier.onDamaged(amount);
+      if (vehicle === this.ctx.player.vehicle) for (const j of this.missions.jobs) if (j.career === 'courier' && j.loaded) j.dmgTaken = (j.dmgTaken || 0) + amount;
       if (this.bus.shift && vehicle === this.bus.shift.vehicle) this.bus.onDamaged(amount);
     });
   }

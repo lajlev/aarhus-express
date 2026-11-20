@@ -81,7 +81,7 @@ export function icon(scene, kind, x, y, size = 22) {
   return g;
 }
 
-export const fmtKr = (n) => `kr ${Math.round(n).toLocaleString('da-DK')}`;
+export const fmtKr = (n) => (n >= 9e8 ? 'kr ∞' : `kr ${Math.round(n).toLocaleString('da-DK')}`); // 1e9 = the infinite-money balance
 export const fmtTime = (s) => {
   s = Math.max(0, Math.ceil(s));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;

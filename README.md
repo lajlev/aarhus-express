@@ -9,7 +9,7 @@ npm run dev        # open http://127.0.0.1:5173/
 
 **The default game is a realistic courier life with no crime.** You rent a cheap basement room in Trøjborg (home marker on the map and minimap) and own a city bike parked at the door. You earn money from honest jobs (courier, taxi shifts and bus routes) and later rent or buy better vehicles. Police only enforce traffic rules.
 
-Crime is opt-in. When you start a **new game** (after choosing a character) a toggles-only screen offers three game options, all OFF by default and fixed for that save:
+Crime is opt-in. Two comfort/cheat toggles, **Infinite money** and **No driving ban**, sit below the Start button of the same screen (also off by default; they do not make the game "crime"). When you start a **new game** (after choosing a character) a toggles-only screen offers three game options, all OFF by default and fixed for that save:
 
 - **Vehicle theft**: steal parked or driven vehicles (E); every stolen vehicle offers a delivery order.
 - **Criminal missions**: Ravn's smuggling and hot-car jobs, Sille's steal-to-order.
@@ -17,7 +17,9 @@ Crime is opt-in. When you start a **new game** (after choosing a character) a to
 
 Police heat (1-5), pursuit, roadblocks and busting are active only when theft or criminal missions is on. Old saves (made before options existed) load with all options ON, and the continue screen tags them "Classic: all options on". Saves show their active options as small tags on the character select screen.
 
-Controls: WASD or arrows to walk and ride/drive, Shift to run, Space for the handbrake, E to get on/off a vehicle (with theft on it also steals), H for the horn, Y/N to accept or refuse a job, B shop, K skills, M map, J the phone job app (courier, taxi and bus tabs; D declines an order there), E at your door (home: sleep, pay rent, garage) or on a vehicle-shop pad (buy, rent, repair), Esc to pause.
+Controls: WASD or arrows to walk and ride/drive, Shift to run, Space for the handbrake, E to get on/off a vehicle (with theft on it also steals), H for the horn, Y/N to accept or refuse a job, B shop, K skills, M map, J the phone job app (courier, taxi, bus and Tasks tabs; D declines an order there), Tab to cycle the tracked task, E at a gig pin to see its offer (Y accepts), M the map (Up/Down select a task pin, Enter accepts or tracks, X abandons), E at your door (home: sleep, pay rent, garage) or on a vehicle-shop pad (buy, rent, repair), Esc to pause.
+
+**Tasks:** you can hold up to four accepted tasks at once (courier orders, street gigs, challenges and a shift slot); one is tracked and drives the arrow, card and minimap line. Street gigs (groceries for a neighbour, a forgotten laptop, a dog walk, a flyer run, a sofa, library books and more) appear around you all the time as pins on the world, minimap and map. City events (concerts at Train, AGF matches, Friday bar rush, rain, the Christmas market) boost pay in their area while they last, and now and then a quick challenge is offered in the app.
 
 Realistic mode: pay weekly rent (1,200 kr, Monday), sleep at home, take courier orders from the Bybud app (your rating drops with traffic fines), rent a van or buy a vehicle at a dealer, drive company taxis and city buses on real Aarhus routes. Traffic lights and speed limits apply: AI obeys them, speed-camera vans and a patrol car fine you (red light, speeding, ramming, pavement, wrong way), three clips on the licence mean a short driving ban (bikes still allowed).
 

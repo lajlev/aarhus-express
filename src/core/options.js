@@ -6,6 +6,9 @@
 //   theft            vehicle theft: steal parked or driven vehicles; every stolen vehicle offers a delivery order.
 //   criminalMissions Ravn's smuggling / hot-car jobs and Sille's steal-to-order (the criminal contacts).
 //   mayhem           hitting pedestrians and exploding cars are allowed with no rating or job penalty.
+//   infiniteMoney    (comfort/cheat) money never limits you: every payment succeeds without lowering the balance (HUD shows the infinity sign).
+//   noDrivingBan     (comfort/cheat) licence clips are still recorded and fines still apply, but a driving ban never starts.
+// The two comfort options have group 'comfort', do not count as crime and do not change "Realistic courier: no crime".
 //
 // Police pursuit and heat are NOT an option of their own: they are active only when theft or
 // criminalMissions is on (pursuitEnabled()). With everything off, police only enforce traffic rules.
@@ -30,13 +33,23 @@ export const OPTION_INFO = [
   },
   {
     id: 'mayhem', label: 'Mayhem', tag: 'Mayhem',
-    desc: 'Run over pedestrians and blow up cars with no rating or job penalty. Off: wrecks are towed and injuries are fined.',
+    desc: 'Run over pedestrians and blow up cars with no penalty. Off: wrecks are towed, injuries fined.',
+  },
+  {
+    id: 'infiniteMoney', label: 'Infinite money', tag: 'Cheat: infinite money', group: 'comfort',
+    desc: 'Money never limits you: purchases, rent, fines and tows do not lower your balance.',
+  },
+  {
+    id: 'noDrivingBan', label: 'No driving ban', tag: 'Cheat: no ban', group: 'comfort',
+    desc: 'Clips and fines still apply, but you are never banned from driving, renting or buying cars.',
   },
 ];
 export const OPTION_IDS = OPTION_INFO.map((o) => o.id);
+export const CRIME_IDS = OPTION_INFO.filter((o) => !o.group).map((o) => o.id);
+export const COMFORT_IDS = OPTION_INFO.filter((o) => o.group === 'comfort').map((o) => o.id);
 
-export const noOptions = () => ({ theft: false, criminalMissions: false, mayhem: false });
-export const allOptions = () => ({ theft: true, criminalMissions: true, mayhem: true });
+export const noOptions = () => ({ theft: false, criminalMissions: false, mayhem: false, infiniteMoney: false, noDrivingBan: false });
+export const allOptions = () => ({ theft: true, criminalMissions: true, mayhem: true, infiniteMoney: false, noDrivingBan: false }); // legacy saves: the old crime game, no cheats
 
 /** Tunables of the realistic (mayhem-off) rules. */
 export const REALISTIC = {
@@ -59,9 +72,9 @@ export function pursuitEnabled() {
   return crimeEnabled();
 }
 
-/** True when every option is off: the default "Realistic courier: no crime" game. */
+/** True when every CRIME option is off: the default "Realistic courier: no crime" game (comfort options do not matter). */
 export function isRealistic(options = session.state?.options) {
-  return !!options && OPTION_IDS.every((id) => !options[id]);
+  return !!options && CRIME_IDS.every((id) => !options[id]);
 }
 
 /** Active option tags for a save/state, for the small tag chips (continue screen, character select). */
@@ -69,8 +82,9 @@ export function optionTags(state) {
   const o = state?.options;
   if (!o) return [];
   if (state.optionsLegacy) return ['Classic: all options on'];
-  const tags = OPTION_INFO.filter((i) => o[i.id]).map((i) => i.tag);
-  return tags.length ? tags : ['Realistic courier'];
+  const crime = OPTION_INFO.filter((i) => !i.group && o[i.id]).map((i) => i.tag);
+  const comfort = OPTION_INFO.filter((i) => i.group && o[i.id]).map((i) => i.tag);
+  return [...(crime.length ? crime : ['Realistic courier']), ...comfort];
 }
 
 /** May the player get into / use this vehicle? With theft off: only owned, rented or job vehicles

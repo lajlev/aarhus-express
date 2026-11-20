@@ -70,7 +70,7 @@ export const pager = (text, kind = 'info', from) => bus.emit(EV.PAGER, { text, k
 // Namespaced system events, re-exported so everything can be imported from here.
 export { TRAFFIC_EV } from '../systems/traffic/events.js';
 export { POLICE_EV } from '../systems/police/tuning.js';
-export { MISSION_EV, JOBS_EV } from '../systems/missions/events.js';
+export { MISSION_EV, JOBS_EV, TASKS_EV } from '../systems/missions/events.js';
 export { ECON_EV } from '../systems/economy/events.js';
 
 // Debug handle for QA scripts (window.__game is the other one).

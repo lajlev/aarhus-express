@@ -6,6 +6,8 @@ Instructions for AI coding agents (Codex, Claude Code and others) working in thi
 
 A top-down open-city courier game set in real Aarhus, Denmark. **The default game is a realistic courier life with no crime**: you rent a cheap basement room (`state.home`), own a city bike, earn money from honest jobs (courier, taxi and bus shifts via the J job app) and pay weekly rent and buy or rent better vehicles. There is a shop of local "fun stuff" that raises Life Quality (LQ), and LQ milestones unlock skill points.
 
+Work is organised as **tasks**: `MissionSystem` keeps up to 4 accepted jobs (courier orders, street gigs, quick challenges, shifts) with one tracked (Tab cycles); `systems/missions/tasks/` (TaskBoard) spawns street gigs around the player, city events (concert, match, bar rush, rain, Christmas market) and challenges, and lists everything nearby for the HUD stack, the J app Tasks tab and the M map. Read the "Tasks" section of `ARCHITECTURE.md` before touching it, and run `node scripts/tasks-test.mjs <url>` after changes.
+
 Crime is opt-in "game options" chosen once in `NewGameScene` when a new game starts, all OFF by default: `theft` (steal vehicles, every stolen vehicle offers an order), `criminalMissions` (Ravn and Sille) and `mayhem` (hit pedestrians and explode cars without penalty). **Police heat (1-5) and pursuit are not an option of their own**: they are active only when theft or criminalMissions is on (`pursuitEnabled()`). Old saves load with all options ON.
 
 Always go through `src/core/options.js` (`opt('theft')`, `crimeEnabled()`, `pursuitEnabled()`, `playerMayUse(v)`); never read `state.options` ad hoc and never add crime-only behaviour without a gate. Test both modes: realistic (all off) and classic (all on).
@@ -49,8 +51,8 @@ src/entities/                     Player.js, Vehicle.js
 src/systems/                      TrafficSystem, PoliceSystem, MissionSystem, EconomySystem
                                   (+ traffic/, police/, missions/, economy/ subfolders)
 src/scenes/                       Boot, CitySelect, CharacterSelect, NewGame, Game, HUD, Overlay, JobApp
-src/ui/                           theme.js, Pager.js
-src/data/                         cities, characters, vehicles, contacts, missions, shop, home
+src/ui/                           theme.js, Pager.js, taskIcons.js
+src/data/                         cities, characters, vehicles, contacts, missions, tasks, shop, home
 scripts/                          fetch-osm, fetch-places, build-map, landmarks, smoke-test
 public/maps/aarhus.json           generated map (~2 MB), do not hand-edit
 public/art/                       manifest.json (+ landmarks/manifest.json), game-ready PNGs

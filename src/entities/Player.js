@@ -69,7 +69,8 @@ export class Player {
       v.input.steer = (right ? 1 : 0) - (left ? 1 : 0);
       v.input.handbrake = k.handbrake.isDown;
       v.mods.speed = v.def.staminaSpeed ? this.fx.runSpeed : this.fx.topSpeed; // pedal power comes from Stamina
-      v.mods.grip = this.fx.handling;
+      const wet = this.scene.systems?.missions?.board?.isRaining?.() ? 0.82 : 1; // rain event: slippery roads
+      v.mods.grip = this.fx.handling * wet;
       v.mods.steer = this.fx.handling;
       if (!v.drivable) v.input.throttle = 0;
       return;
@@ -130,7 +131,8 @@ export class Player {
       pager('Not your vehicle.', 'warn');
       return false;
     }
-    if (!v.def.bike && this.scene.ctx?.systems?.police?.isLicenceBanned?.()) {
+    const police = this.scene?.systems?.police || this.scene?.ctx?.systems?.police;
+    if (!v.def.bike && police?.isLicenceBanned?.()) {
       pager('Licence suspended: no driving cars.', 'warn');
       return false;
     }

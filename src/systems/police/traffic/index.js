@@ -209,6 +209,7 @@ export function createTrafficRules(ctx) {
       px0 = v.x; py0 = v.y; havePrev = true;
     },
     getLicence: () => licence.get(),
+    addClips: (n) => licence.addClips(n), // tests / debug
     isBanned: () => licence.banned,
     cameraSpots: () => vans.spots,
     patrolCars: () => patrols.cars,

@@ -15,7 +15,10 @@ import Phaser from 'phaser';
 import { bus, EV } from '../core/events.js';
 import { session, SKILLS, SKILL_MAX, skillLevel } from '../core/state.js';
 import { GAME_W, GAME_H, TITLE } from '../config.js';
-import { C, S, txt, icon, ensureFonts, fmtKr, lqThreshold } from '../ui/theme.js';
+import { C, S, txt, icon, ensureFonts, fmtKr, fmtTime, lqThreshold } from '../ui/theme.js';
+import { drawTaskIcon, taskColor } from '../ui/taskIcons.js';
+import { TASK_TYPES } from '../data/tasks.js';
+import { PX } from '../config.js';
 import { getShop } from '../data/shop.js';
 import { getContacts } from '../data/contacts.js';
 import { contactEnabled } from '../core/options.js';
@@ -35,7 +38,9 @@ export const CONTROLS = [
   ['Y / N', 'Accept / decline a job offer'],
   ['B', 'Shop (spend money, gain LQ)'],
   ['K', 'Skills (spend skill points)'],
-  ['M', 'Full map'],
+  ['M', 'Full map: select task pins, Enter accepts or tracks'],
+  ['Tab', 'Cycle the tracked task'],
+  ['J', 'Phone job app: Courier, Taxi, Bus, Tasks'],
   ['Esc / P', 'Pause'],
 ];
 
@@ -77,6 +82,7 @@ export class OverlayScene extends Phaser.Scene {
     kb.on('keydown-ENTER', () => this._activate());
     kb.on('keydown-SPACE', () => this._activate());
     kb.on('keydown-Q', () => { if (this.mode === 'pause') this._quit(); });
+    kb.on('keydown-X', () => this._abandon?.());
     // simple mode switching between shop / skills / map from inside an overlay
     for (const [m, k] of [['shop', 'B'], ['skills', 'K'], ['map', 'M']]) {
       if (m !== this.mode) kb.on(`keydown-${k}`, () => this.scene.restart({ mode: m }));
@@ -109,9 +115,10 @@ export class OverlayScene extends Phaser.Scene {
     this.layer?.destroy(true);
     this.layer = this.add.container(0, 0);
     this._top();
-    const hint = { pause: 'Up/Down choose   Enter select   Esc resume', shop: 'Up/Down choose   Enter buy   Esc or B close   K skills   M map', skills: 'Up/Down choose   Enter upgrade   Esc or K close   B shop   M map', map: 'Esc or M close   B shop   K skills', home: 'Up/Down choose   Enter select   Esc or E leave', dealer: 'Up/Down choose   Left/Right rental days   Enter buy or rent   Esc or E leave' }[this.mode];
+    const hint = { pause: 'Up/Down choose   Enter select   Esc resume', shop: 'Up/Down choose   Enter buy   Esc or B close   K skills   M map', skills: 'Up/Down choose   Enter upgrade   Esc or K close   B shop   M map', map: 'Up/Down select a pin   Enter accept or track   X abandon   click a pin   Esc or M close', home: 'Up/Down choose   Enter select   Esc or E leave', dealer: 'Up/Down choose   Left/Right rental days   Enter buy or rent   Esc or E leave' }[this.mode];
     this.footer.setText(hint);
     this._lr = null;
+    this._abandon = null;
     this[`_${this.mode}`]?.();
   }
 
@@ -359,6 +366,66 @@ export class OverlayScene extends Phaser.Scene {
     const pts = [pt(rot, 10), pt(rot + 2.5, 8), pt(rot + Math.PI, 3), pt(rot - 2.5, 8)];
     g.fillStyle(C.paper, 1).fillPoints(pts, true).lineStyle(2.5, C.orange, 1).strokePoints(pts, true);
     this._t(q.x + 12, q.y + 6, 'YOU', { head: true, size: 13, stroke: S.ink, strokeThickness: 4 });
+    // task layer: event areas, available task pins, active tasks (selectable with Up/Down, Enter accepts or tracks)
+    const msys = g0.systems?.missions, board = msys?.board;
+    const pins = [];
+    if (board) {
+      for (const t of msys.taskList()) if (t.x != null) pins.push({ active: true, type: t.type, x: t.x, y: t.y, title: t.title, sub: `${t.stageName}${t.progress ? ` · ${t.progress}` : ''}`, timeLeft: t.timeLeft, task: t, tracked: t.tracked, act: t.tracked ? 'Tracked' : 'Track' });
+      for (const e of board.entries(true)) if (e.x != null) pins.push({ active: false, type: e.type, x: e.x, y: e.y, title: e.title, sub: e.sub, pay: e.pay, lq: e.lq, ttl: e.ttl, limit: e.limit, entry: e, act: e.act, boost: e.boost });
+      for (const ev of board.activeEvents()) {
+        if (ev.global) continue;
+        const c = P(ev.x, ev.y), r = Math.max(10, ev.r * mm.scale * k);
+        g.fillStyle(ev.color, 0.22).fillCircle(c.x, c.y, r).lineStyle(3, ev.color, 0.9).strokeCircle(c.x, c.y, r);
+        this._t(c.x, c.y - r - 4, ev.name, { head: true, size: 14, ox: 0.5, oy: 1, color: '#F0B8FF', stroke: S.ink, strokeThickness: 4 });
+      }
+    }
+    this._pins = pins;
+    this._count = () => pins.length;
+    this._lr = (d) => this._move(d);
+    this.sel = Math.max(0, Math.min(this.sel, pins.length - 1));
+    pins.forEach((pn, i) => {
+      const q = P(pn.x, pn.y), on = i === this.sel;
+      const r = pn.type === 'gig' ? 7 : 8;
+      if (pn.active) g.lineStyle(3, C.paper, 1).strokeCircle(q.x, q.y, r + 5);
+      if (pn.tracked) g.lineStyle(3, C.orange, 1).strokeCircle(q.x, q.y, r + 9);
+      drawTaskIcon(g, pn.type, q.x, q.y, r);
+      if (on) { g.lineStyle(3, C.paper, 1).strokeCircle(q.x, q.y, r + 12); g.lineStyle(2, taskColor(pn.type), 1).strokeCircle(q.x, q.y, r + 16); }
+      const z = this.add.zone(q.x - 14, q.y - 14, 28, 28).setOrigin(0).setInteractive({ useHandCursor: true });
+      z.on('pointerdown', () => { if (this.sel === i) this._activate(); else { this.sel = i; this._render(); } });
+      this.layer.add(z);
+    });
+    this._do = (i) => {
+      const pn = pins[i];
+      if (!pn) return;
+      if (pn.active) { const ok = msys.track(pn.task.id); this._flash({ ok, reason: 'Cannot track this' }, `Tracking: ${pn.task.short}`); }
+      else { const res = board.acceptEntry(pn.entry); this._flash(res, `Accepted: ${pn.title}`); if (res.ok) this.sel = 0; }
+      this._render();
+    };
+    this._abandon = () => { const pn = pins[this.sel]; if (pn?.active && pn.task.job) { msys.abandon(pn.task.job); this._flash({ ok: true }, `Abandoned: ${msys.abandonPenalty(pn.task.job)}`); this.sel = 0; this._render(); } };
+    // details of the selected pin
+    const sp = pins[this.sel];
+    const px0 = GAME_W - 360, py0 = 110;
+    const pg = this._g(); // created after the map labels so the panel covers them
+    pg.fillStyle(C.ink2, 0.98).fillRoundedRect(px0, py0, 330, 232, 12).lineStyle(2, sp ? taskColor(sp.type) : C.ink3, 1).strokeRoundedRect(px0, py0, 330, 232, 12);
+    if (sp) {
+      drawTaskIcon(pg, sp.type, px0 + 28, py0 + 28, 11);
+      this._t(px0 + 50, py0 + 10, TASK_TYPES[sp.type]?.label.toUpperCase() || '', { head: true, size: 12, color: S.muted });
+      this._t(px0 + 50, py0 + 26, sp.title, { head: true, size: 17, wrap: 268 });
+      const dm = Math.round(Math.hypot(sp.x - p.px, sp.y - p.py) / PX);
+      const bits = [`${dm >= 1000 ? `${(dm / 1000).toFixed(1)} km` : `${Math.round(dm / 10) * 10} m`} away`];
+      if (sp.pay) bits.push(fmtKr(sp.pay));
+      if (sp.lq) bits.push(`+${sp.lq} LQ`);
+      if (sp.timeLeft != null) bits.push(`${fmtTime(sp.timeLeft)} left`); else if (sp.limit) bits.push(`${fmtTime(sp.limit)} to do it`);
+      if (sp.ttl) bits.push(`gone in ${fmtTime(sp.ttl)}`);
+      this._t(px0 + 16, py0 + 78, sp.sub, { size: 13, color: S.muted, wrap: 298 });
+      this._t(px0 + 16, py0 + 150, bits.join(' · '), { size: 13, color: S.green, wrap: 298 });
+      if (sp.boost) this._t(px0 + 16, py0 + 172, `Boost: ${sp.boost}`, { size: 13, bold: true, color: S.gold });
+      this._button(pg, px0 + 16, py0 + 190, 298, 32, sp.active ? (sp.tracked ? 'TRACKED (X abandon)' : 'TRACK  (X abandon)') : sp.act.toUpperCase(), { selected: true });
+      const bz = this.add.zone(px0 + 16, py0 + 190, 298, 32).setOrigin(0).setInteractive({ useHandCursor: true });
+      bz.on('pointerdown', () => this._activate());
+      this.layer.add(bz);
+    } else this._t(px0 + 16, py0 + 16, 'No task pins yet.\nGigs appear around you.', { size: 14, color: S.muted });
+    if (this.msg) this._t(px0 + 16, py0 + 240, this.msg.t, { head: true, size: 16, color: this.msg.c, wrap: 298 });
     // legend
     const items = [[C.paper, 'Landmark'], [C.green, 'Shop venue'], [C.blue, 'Bike shop'], [C.gold, 'Rental'], [C.orange, 'Dealer'], [C.gold, 'Contact'], [C.red, 'Criminal contact'], [C.blue, 'Police'], [C.orange, 'Target']];
     items.forEach(([c, l], i) => { // vertical list at the left: the map is narrow and tall
@@ -366,6 +433,14 @@ export class OverlayScene extends Phaser.Scene {
       g.fillStyle(c, 1).fillCircle(48, ly, 5);
       this._t(62, ly, l, { size: 14, oy: 0.5, color: S.muted });
     });
+    const tl = [['gig', 'Street gig'], ['courier', 'Courier order'], ['taxi', 'Taxi stand / hail'], ['bus', 'Bus line start'], ['event', 'Event area']];
+    this._t(40, 120 + items.length * 26 + 6, 'TASKS', { head: true, size: 13, color: S.orange });
+    tl.forEach(([t, l], i) => {
+      const ly = 120 + items.length * 26 + 36 + i * 26;
+      drawTaskIcon(g, t, 48, ly, 7);
+      this._t(62, ly, l, { size: 14, oy: 0.5, color: S.muted });
+    });
+    this._t(40, 120 + items.length * 26 + 36 + tl.length * 26 + 4, 'White ring: on your list\nOrange ring: tracked', { size: 12, color: S.muted });
   }
 
   // ------------------------------------------------------------ weekly economy block (pause)

@@ -33,9 +33,10 @@ export class MarkerLayer {
     if (hasIcon) { // art textures are 64 px native (~8 m): display at ~40 px (5 m)
       let img = this.images[this._ii++];
       if (!img) { img = this.scene.add.image(0, 0, key).setDepth(DEPTH.marker + 2); this.images.push(img); }
-      img.setVisible(true).setPosition(m.x, m.y).setScale(0.62 + 0.04 * pulse);
+      img.setVisible(true).setPosition(m.x, m.y).setScale(0.62 + 0.04 * pulse).setAlpha(m.dim ? 0.6 : 1);
     }
     const g = this.g;
+    const dim = m.dim ? 0.55 : 1;
     if (m.kind === 'contact') {
       if (hasIcon) {
         g.lineStyle(3, col, 0.4 + 0.5 * pulse).strokeCircle(m.x, m.y, 32 + 6 * pulse);
@@ -50,8 +51,8 @@ export class MarkerLayer {
         g.lineStyle(3, col, 0.4 + 0.5 * pulse).strokeCircle(m.x, m.y, 26 + 6 * pulse);
       }
     } else {
-      g.fillStyle(col, 0.12 + 0.1 * pulse).fillCircle(m.x, m.y, R);
-      g.lineStyle(4, col, 0.85).strokeCircle(m.x, m.y, R * (0.9 + 0.1 * pulse));
+      g.fillStyle(col, (0.12 + 0.1 * pulse) * dim).fillCircle(m.x, m.y, R);
+      g.lineStyle(m.dim ? 3 : 4, col, 0.85 * dim).strokeCircle(m.x, m.y, R * (0.9 + 0.1 * pulse));
       if (m.progress > 0) {
         g.lineStyle(8, 0xffffff, 0.95).beginPath().arc(m.x, m.y, R * 0.6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * m.progress).strokePath();
       }

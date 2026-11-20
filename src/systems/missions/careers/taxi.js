@@ -49,7 +49,8 @@ export class Taxi {
     const ctx = this.ctx, m = this.careers.missions, pl = ctx.player;
     if (!this.st.signed) return { ok: false, reason: 'Sign up first' };
     if (this.careers.shiftActive()) return { ok: false, reason: 'You are already on a shift' };
-    if (m.job || m.offer) return { ok: false, reason: 'Finish your current job first' };
+    const can = m.canAccept({ kind: 'shift', career: 'taxi' });
+    if (!can.ok) return can;
     const stands = this.stands();
     if (!stands.length) return { ok: false, reason: 'No taxi stand on this map' };
     stands.sort((a, b) => Math.hypot(a.x - pl.px, a.y - pl.py) - Math.hypot(b.x - pl.px, b.y - pl.py));
@@ -78,7 +79,8 @@ export class Taxi {
   _finish(ok, reason) {
     const s = this.shift, ctx = this.ctx, m = this.careers.missions;
     if (!s) return;
-    if (m.job?.career === 'taxi') m._fail(reason || 'shift ended');
+    const fare = m.jobOfCareer('taxi');
+    if (fare) m._fail(reason || 'shift ended', fare);
     if (m.offer && m.offer.job?.career === 'taxi') m.decline('busy');
     let pay = 0;
     if (ok) {
@@ -101,6 +103,17 @@ export class Taxi {
   // ---------------------------------------------------------------- fares
   _pickupPoint() {
     const ctx = this.ctx, w = ctx.world, pl = ctx.player, g = w.drive;
+    // an event area nearby pulls hails to it (surge pricing)
+    const evs = (ctx.systems.missions.board?.activeEvents() || []).filter((e) => !e.global && Math.hypot(e.x - pl.px, e.y - pl.py) < 1800 * PX);
+    if (evs.length && Math.random() < 0.65) {
+      const ev = pick(evs);
+      for (let k = 0; k < 8; k++) {
+        const n = g.randomNodeInRing(ev.x, ev.y, 0, ev.r * 0.9);
+        if (n < 0) continue;
+        const street = streetName(w, g.x[n], g.y[n]);
+        if (street) return { x: g.x[n], y: g.y[n], name: `${ev.name}: hailing on ${street}`, where: 'event' };
+      }
+    }
     if (Math.random() < TAXI.standOnly) {
       const near = this.stands().filter((s) => { const d = Math.hypot(s.x - pl.px, s.y - pl.py) / PX; return d > 120 && d < 1400; });
       if (near.length) { const s = pick(near); return { x: s.x, y: s.y, name: s.label, where: 'stand' }; }
@@ -147,10 +160,12 @@ export class Taxi {
     const lvl = clamp(Math.ceil(s.level / 2), 1, 3);
     const nav = ctx.systems?.economy?.getEffects?.().timeLimit ?? 1;
     const est = to.metres / 1000;
+    const ev = ctx.systems.missions.board?.eventAt(from.x, from.y) || null;
+    const surge = ev ? ev.surge : 1;
     const limit = Math.round(((to.metres / TUNING.speedMps) * TUNING.timeSlack * 1.1 + TUNING.timeBase + TUNING.stopSeconds) * LEVELS[lvl - 1].timeMul * nav);
     const job = {
-      id: `taxi${nextFare++}`, kind: 'order', career: 'taxi', title: `Taxa: ${to.name}`, legal: true, level: lvl, state: 'offered',
-      stageIndex: 0, timeLeft: null, timeLimit: limit, timerFrom: 1, timerTo: 2, reward: Math.round(this.meterFare(est, est * 1000 / 11 / 60 * 1.3)), metres: Math.round(to.metres),
+      id: `taxi${nextFare++}`, kind: 'order', career: 'taxi', title: `Taxa${surge > 1.02 ? ` x${surge.toFixed(1)}` : ''}: ${to.name}`, short: `Fare: ${to.name}`, surge, event: ev ? ev.name : null, legal: true, level: lvl, state: 'offered',
+      stageIndex: 0, timeLeft: null, timeLimit: limit, timerFrom: 1, timerTo: 2, reward: Math.round(this.meterFare(est, est * 1000 / 11 / 60 * 1.3) * surge), metres: Math.round(to.metres),
       cargo: { size: 1, fragile: true, name: 'Passenger' }, passenger: true, damage: 0, loaded: false, requireVehicle: s.vehicle,
       meter: { km: 0, minutes: 0, fare: 0, hardBrakes: 0 },
       stages: [
@@ -158,7 +173,7 @@ export class Taxi {
         { action: 'dropoff', x: to.x, y: to.y, name: to.name, radius: TUNING.dropRadius },
       ],
       payoutFn: (c, j, { frac, integ }) => {
-        const base = Math.round(this.meterFare(j.meter.km, j.meter.minutes, s.level));
+        const base = Math.round(this.meterFare(j.meter.km, j.meter.minutes, s.level) * (j.surge || 1));
         const tipMul = c.systems?.economy?.getEffects?.().tips ?? 1;
         const tip = !j.ticketed && integ > 0.6 && frac > 0.1 ? Math.round(base * TAXI.tipMax * integ * integ * Math.min(1, frac * 1.5) * tipMul * (0.6 + Math.random() * 0.4)) : 0;
         return { base, tip };
@@ -203,7 +218,7 @@ export class Taxi {
     if (s.awayT > TAXI.awaySeconds) { this._finish(false, 'you left the taxi'); return; }
     if (s.stage === 'work') {
       s.timeLeft -= dt;
-      const busy = m.job || m.offer;
+      const busy = m.jobOfCareer('taxi') || m.offer;
       if (s.timeLeft <= 0 && !busy) { s.stage = 'return'; pager(`Shift time is up: return the taxi to ${s.stand.name}.`, 'job', 'Dispatch'); }
       else if (!busy && inTaxi) { s.nextHail -= dt; if (s.nextHail <= 0) this._hail(); }
     } else if (s.stage === 'return') {
@@ -213,12 +228,12 @@ export class Taxi {
   }
 
   _meter(dt, v) {
-    const j = this.careers.missions.job;
-    if (!j || j.career !== 'taxi' || !j.loaded || j.stageIndex !== 1 || this.ctx.player.vehicle !== v) { this._spdT = 0; this._spd[0] = v.speedMps; return; }
+    const j = this.careers.missions.jobOfCareer('taxi');
+    if (!j || !j.loaded || j.stageIndex !== 1 || this.ctx.player.vehicle !== v) { this._spdT = 0; this._spd[0] = v.speedMps; return; }
     const mt = j.meter;
     mt.km += (v.speed * dt) / PX / 1000;
     mt.minutes += dt / 60;
-    j.reward = Math.round(this.meterFare(mt.km, mt.minutes, this.shift?.level || this.level));
+    j.reward = Math.round(this.meterFare(mt.km, mt.minutes, this.shift?.level || this.level) * (j.surge || 1));
     this._brakeCd -= dt;
     this._spdT += dt;
     if (this._spdT >= 0.25) {
@@ -233,7 +248,7 @@ export class Taxi {
         const integrity = Math.max(0, 1 - j.damage / (v.maxHealth * 0.6));
         bus.emit(MISSION_EV.CARGO, { job: j, damage: j.damage, integrity });
         this.careers.missions._hint('Easy on the brakes, the passenger is not happy');
-        if (integrity <= 0.05) this.careers.missions._fail('the passenger bailed out');
+        if (integrity <= 0.05) this.careers.missions._fail('the passenger bailed out', j);
       }
     }
   }
@@ -241,7 +256,7 @@ export class Taxi {
   // ---------------------------------------------------------------- UI helpers
   targetPoint() {
     const s = this.shift, m = this.careers.missions;
-    if (!s || m.job || m.offer) return null;
+    if (!s || m.jobOfCareer('taxi') || m.offer?.job?.career === 'taxi') return null;
     if (s.stage === 'toTaxi') return { x: s.vehicle.x, y: s.vehicle.y, name: 'Your taxi', action: 'enter' };
     if (s.stage === 'return') return { x: s.stand.x, y: s.stand.y, name: s.stand.name, action: 'dropoff' };
     return null;

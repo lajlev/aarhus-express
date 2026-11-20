@@ -27,9 +27,12 @@ import { C, S, F, txt, panel, icon, ensureFonts, fmtKr, fmtTime, lqThreshold } f
 import { Pager } from '../ui/Pager.js';
 import { getContacts } from '../data/contacts.js';
 import { contactEnabled, pursuitEnabled } from '../core/options.js';
+import { drawTaskIcon, taskColor } from './../ui/taskIcons.js';
 
 const MM = 212; // minimap size
-const STAGE_LABEL = { pickup: 'PICK UP', dropoff: 'DELIVER', enter: 'GET IN', busstop: 'STOP AT' };
+const STAGE_LABEL = { pickup: 'PICK UP', dropoff: 'DELIVER', enter: 'GET IN', busstop: 'STOP AT', visit: 'GO TO', wait: 'HELP OUT', hold: 'STAY CLEAN', count: 'GOAL' };
+const KIND_LABEL = { mission: 'MISSION', shift: 'SHIFT', gig: 'GIG', challenge: 'CHALLENGE', event: 'EVENT' };
+const TASK_ROWS = 7;
 
 export class HUDScene extends Phaser.Scene {
   constructor() { super('HUD'); }
@@ -46,6 +49,7 @@ export class HUDScene extends Phaser.Scene {
     this.contactPts = null;
 
     this._buildStatic();
+    this._buildTasks();
     this._buildAudio();
     this._buildRules();
     this.pager = new Pager(this, 16, GAME_H - 16);
@@ -133,6 +137,70 @@ export class HUDScene extends Phaser.Scene {
 
     // --- money delta popup pool
     this.deltaPool = [];
+  }
+
+  // Task stack under the money panel: one line per active task (icon, name, distance, countdown), tracked one highlighted, event chips below.
+  _buildTasks() {
+    this.tkG = this.add.graphics();
+    this.tkHead = txt(this, 22, 142, '', { head: true, size: 12, color: S.muted });
+    this.tkHint = txt(this, 276, 142, '', { head: true, size: 11, color: S.muted, ox: 1 });
+    this.tkRows = [];
+    for (let i = 0; i < TASK_ROWS; i++) {
+      this.tkRows.push({
+        name: txt(this, 0, 0, '', { size: 13 }),
+        dist: txt(this, 0, 0, '', { size: 12, color: S.muted, ox: 1 }),
+        time: txt(this, 0, 0, '', { head: true, size: 14, ox: 1 }),
+      });
+    }
+  }
+
+  _tasks(sys, p, time) {
+    const g = this.tkG.clear();
+    const m = sys.missions;
+    const list = m?.taskList?.() || [];
+    const board = m?.board;
+    const evs = (board?.activeEvents?.() || []).filter((e) => e.global || Math.hypot(e.x - p.px, e.y - p.py) < 2600 * PX).slice(0, 2);
+    const rows = this.tkRows;
+    const n = Math.min(list.length, TASK_ROWS - evs.length);
+    this.tkHead.setVisible(list.length + evs.length > 0);
+    this.tkHint.setVisible(list.length > 1);
+    this.tkHead.setText(list.length ? `TASKS ${m.slotsUsed()}/${4}` : 'EVENTS');
+    this.tkHint.setText('[TAB] TRACK');
+    const x0 = 16, w = 262, rh = 28;
+    let y = 160;
+    const cut = (t, k) => (t.length > k ? `${t.slice(0, k - 1)}…` : t);
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (i >= n + evs.length) { r.name.setVisible(false); r.dist.setVisible(false); r.time.setVisible(false); continue; }
+      const isEv = i >= n;
+      let type, label, distTxt = '', timeTxt = '', timeCol = S.paper, tracked = false;
+      if (!isEv) {
+        const t = list[i];
+        type = t.type; label = cut(t.short, 17); tracked = t.tracked;
+        if (t.progress) distTxt = t.progress;
+        else if (t.x != null) { const d = Math.hypot(t.x - p.px, t.y - p.py) / PX; distTxt = d >= 1000 ? `${(d / 1000).toFixed(1)}km` : `${Math.round(d)}m`; }
+        if (t.timeLeft != null) {
+          timeTxt = fmtTime(t.timeLeft);
+          timeCol = t.timeLeft < 15 ? (Math.floor(time / 250) % 2 ? S.red : S.paper) : t.timeLeft < 60 ? S.orange : S.paper;
+        }
+      } else {
+        const e = evs[i - n];
+        type = 'event'; label = cut(e.name, 20);
+        const left = Math.max(0, e.endMin - (sys.economy?.getClock?.().minutes ?? 0));
+        timeTxt = left >= 60 ? `${Math.floor(left / 60)}h${String(Math.round(left % 60)).padStart(2, '0')}` : `${Math.round(left)}m`;
+        timeCol = S.muted;
+      }
+      const col = taskColor(type);
+      g.fillStyle(C.ink, 0.82).fillRoundedRect(x0, y, w, rh, 8);
+      g.lineStyle(tracked ? 2 : 1, tracked ? C.orange : C.ink3, 1).strokeRoundedRect(x0, y, w, rh, 8);
+      if (tracked) g.fillStyle(C.orange, 1).fillRoundedRect(x0, y + 5, 4, rh - 10, 2);
+      else g.fillStyle(col, 0.9).fillRoundedRect(x0, y + 5, 3, rh - 10, 1.5);
+      drawTaskIcon(g, type, x0 + 20, y + rh / 2, 7);
+      r.name.setVisible(true).setText(label).setPosition(x0 + 34, y + 6).setColor(tracked ? S.paper : (isEv ? S.muted : '#d9d4c8'));
+      r.dist.setVisible(true).setText(distTxt).setPosition(x0 + w - 58, y + 8);
+      r.time.setVisible(true).setText(timeTxt).setPosition(x0 + w - 10, y + 5).setColor(timeCol);
+      y += rh + 4;
+    }
   }
 
   // Traffic rules: speed-limit sign (left of the vehicle panel), licence clips (right of it), ticket popup (top centre under the audio panel).
@@ -259,19 +327,19 @@ export class HUDScene extends Phaser.Scene {
     listen(this, EV.JOB_STARTED, ({ job }) => {
       this.offer = null;
       this.cardPulse = this.time.now + 600;
-      stampSoon(() => this.pager.push({ text: `Order started: ${job?.title || ''}`, kind: 'job' }));
+      stampSoon(() => this.pager.push({ text: `${job?.kind === 'gig' ? 'Gig' : job?.kind === 'challenge' ? 'Challenge' : 'Order'} started: ${job?.title || ''}`, kind: 'job' }));
     });
     listen(this, EV.JOB_STAGE, () => { this.cardPulse = this.time.now + 600; });
     listen(this, EV.JOB_COMPLETED, ({ job, payout }) => {
       this.offer = null;
       const amt = payout ?? job?.reward ?? 0;
-      const word = job?.kind === 'mission' ? 'MISSION DONE' : 'DELIVERED';
+      const word = job?.kind === 'mission' ? 'MISSION DONE' : job?.kind === 'gig' ? 'GIG DONE' : job?.kind === 'challenge' ? 'CHALLENGE DONE' : job?.kind === 'event' ? 'ARRIVED' : 'DELIVERED';
       this._state('ok', `${word}${amt ? ` +${fmtKr(amt)}` : ''}`, job?.title || '', 2600);
     });
     listen(this, EV.JOB_FAILED, ({ job, reason }) => {
       this.offer = null;
-      this._state('fail', 'ORDER FAILED', reason ? String(reason) : (job?.title || ''), 2600);
-      stampSoon(() => this.pager.push({ text: `Order failed${reason ? `: ${reason}` : '.'}`, kind: 'warn' }));
+      this._state('fail', job?.kind === 'gig' ? 'GIG FAILED' : job?.kind === 'challenge' ? 'CHALLENGE FAILED' : 'ORDER FAILED', reason ? String(reason) : (job?.title || ''), 2600);
+      stampSoon(() => this.pager.push({ text: `${job?.kind === 'gig' ? 'Gig' : job?.kind === 'challenge' ? 'Challenge' : 'Order'} failed${reason ? `: ${reason}` : '.'}`, kind: 'warn' }));
     });
     // hide the HUD while a modal overlay is open (it would bleed through the dim backdrop)
     listen(this, EV.OVERLAY_CLOSED, () => this.scene.setVisible(true));
@@ -348,6 +416,7 @@ export class HUDScene extends Phaser.Scene {
     this._card(st, sys, p, time);
     this._vehicle(p);
     this._rules(p, sys, time);
+    this._tasks(sys, p, time);
     this._prompt(p, time);
     this._minimap(g, p, sys, time);
     this._location(g, p, time);
@@ -515,14 +584,15 @@ export class HUDScene extends Phaser.Scene {
     const hasTimer = job.timeLeft != null;
     const shift = job.kind === 'shift';
     const behind = shift && hasTimer && job.timeLeft <= 0; // bus shift: 0 means behind schedule, not expired
-    const urgent = hasTimer && !shift && job.timeLeft < 15;
+    const urgent = hasTimer && !shift && !job.survive && job.timeLeft < 15;
     const flash = urgent && Math.floor(time / 250) % 2;
     const edge = urgent ? (flash ? C.red : C.ink3) : (pulse ? C.paper : C.ink3);
     panel(g, x0, y0, w, 138, { stroke: edge, accent: urgent ? C.red : C.orange });
-    this.cardHead.setText(`${job.kind === 'mission' ? 'MISSION' : shift ? 'SHIFT' : 'ORDER'} · ${STAGE_LABEL[stage?.action] || 'GO'}`).setColor(S.orange).setVisible(true);
+    const nJobs = sys.missions?.jobs?.length || 1, jIdx = (sys.missions?.jobs?.indexOf(job) ?? 0) + 1;
+    this.cardHead.setText(`${KIND_LABEL[job.kind] || 'ORDER'} · ${STAGE_LABEL[stage?.action] || 'GO'}${nJobs > 1 ? `  ·  ${jIdx}/${nJobs}` : ''}`).setColor(S.orange).setVisible(true);
     const ttl = job.title || ''; // one line only: a wrapped title would overlap the destination
     this.cardTitle.setText(ttl.length > 25 ? `${ttl.slice(0, 24)}…` : ttl).setVisible(true);
-    this.cardDest.setText(stage?.name || '...').setColor(S.paper).setVisible(true).setWordWrapWidth(186);
+    this.cardDest.setText(stage?.action === 'count' ? `${stage.name} ${stage.count || 0}/${stage.goal}` : (stage?.name || '...')).setColor(S.paper).setVisible(true).setWordWrapWidth(186);
     if (hasTimer) {
       if (behind) this.cardTimer.setText('LATE').setColor(S.gold).setVisible(true);
       else this.cardTimer.setText(fmtTime(job.timeLeft)).setColor(urgent ? (flash ? S.paper : S.red) : S.paper).setVisible(true);
@@ -657,6 +727,30 @@ export class HUDScene extends Phaser.Scene {
       if (!inside(x, y, 2)) continue;
       d.fillStyle(c.legal === false ? C.red : C.gold, 1).fillCircle(x, y, 3.5).lineStyle(1.5, C.ink, 1).strokeCircle(x, y, 3.5);
     }
+    // city events: glowing areas; available tasks: small type icons; other active tasks: dim rings
+    const board = sys.missions?.board;
+    if (board) {
+      for (const e of board.activeEvents()) {
+        if (e.global) continue;
+        const x = px(e.x), y = py(e.y), r = Math.max(6, e.r * mm.scale);
+        if (x + r < x0 || x - r > x0 + S_ || y + r < y0 || y - r > y0 + S_) continue;
+        const pu = 0.5 + 0.5 * Math.sin(time / 300);
+        d.fillStyle(e.color, 0.16 + 0.1 * pu).fillCircle(x, y, r);
+        d.lineStyle(2, e.color, 0.55 + 0.35 * pu).strokeCircle(x, y, r);
+      }
+      for (const pin of board.pins()) {
+        const x = px(pin.x), y = py(pin.y);
+        if (!inside(x, y, 4)) continue;
+        drawTaskIcon(d, pin.type, x, y, pin.type === 'gig' ? 4 : 3.4);
+      }
+      for (const t of sys.missions.taskList()) {
+        if (t.tracked || t.x == null) continue;
+        const x = px(t.x), y = py(t.y);
+        if (!inside(x, y, 5)) continue;
+        d.lineStyle(2, taskColor(t.type), 1).strokeCircle(x, y, 5.5);
+        d.fillStyle(C.ink, 1).fillCircle(x, y, 2.2);
+      }
+    }
     // home (basement room): small house icon
     const hm = g.world?.home;
     if (hm) {
@@ -689,6 +783,7 @@ export class HUDScene extends Phaser.Scene {
       let x = px(tp.x), y = py(tp.y);
       const pulse = 5 + 1.5 * Math.sin(time / 220);
       if (inside(x, y, 8)) {
+        d.lineStyle(1.5, C.orange, 0.55).lineBetween(px(p.px), py(p.py), x, y); // line from you to the tracked target
         d.lineStyle(2, C.orange, 1).strokeCircle(x, y, pulse + 3);
         d.fillStyle(C.orange, 1).fillCircle(x, y, 5).lineStyle(2, C.ink, 1).strokeCircle(x, y, 5);
       } else {
@@ -724,7 +819,7 @@ export class HUDScene extends Phaser.Scene {
     const hw = GAME_W / 2 - m - 20, hh = GAME_H / 2 - m - 20;
     const kmax = Math.min(Math.abs(hw / Math.cos(ang || 1e-6)), Math.abs(hh / Math.sin(ang || 1e-6)));
     // keep the arrow clear of the HUD panels: pull it inwards along the ray until it is outside them
-    const zones = [[420, 16, 530, 84], [0, 0, 310, 160], [GAME_W - 340, 0, 340, 250], [GAME_W - 260, GAME_H - 260, 260, 260], [GAME_W / 2 - 170, GAME_H - 150, 340, 150], [0, GAME_H - 320, 400, 320]];
+    const zones = [[420, 16, 530, 84], [0, 0, 310, 380], [GAME_W - 340, 0, 340, 250], [GAME_W - 260, GAME_H - 260, 260, 260], [GAME_W / 2 - 170, GAME_H - 150, 340, 150], [0, GAME_H - 320, 400, 320]];
     let k = kmax, x = 0, y = 0;
     for (; k > kmax * 0.35; k -= 8) {
       x = cx + Math.cos(ang) * k; y = cy + Math.sin(ang) * k;

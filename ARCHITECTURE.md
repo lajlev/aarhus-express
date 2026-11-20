@@ -71,14 +71,14 @@ src/
   scenes/CitySelectScene.js
   scenes/CharacterSelectScene.js   picks a character; a save continues, no save goes to NewGameScene
   scenes/NewGameScene.js  toggles-only screen for the game options (all OFF by default), creates the state, starts Game
-  scenes/JobAppScene.js   phone job app overlay on J (courier, taxi, bus tabs)
+  scenes/JobAppScene.js   phone job app overlay on J (courier, taxi, bus, Tasks tabs)
   scenes/GameScene.js     world, player, vehicle registry, camera, systems loop, respawn, autosave
   scenes/HUDScene.js      HUD: money, LQ, heat, bust meter, order card, pager, minimap, banners, waypoint arrow
   scenes/OverlayScene.js  pause, shop (B), skills (K), map (M)
-  ui/                     Pager.js, theme.js (HUD helpers)
+  ui/                     Pager.js, theme.js (HUD helpers), taskIcons.js (one icon per task type, used by HUD/minimap/map/app)
   systems/TrafficSystem.js   AI traffic, parked cars, pedestrians (+ systems/traffic/)
   systems/PoliceSystem.js    heat, pursuit, roadblocks, officers, busting (+ systems/police/)
-  systems/MissionSystem.js   delivery orders + contact missions, owns the [Y]/[N] keys (+ systems/missions/)
+  systems/MissionSystem.js   the ACTIVE task list (up to 4 jobs, one tracked), orders + contact missions + gigs + challenges, owns [Y]/[N]/Tab (+ systems/missions/, systems/missions/tasks/ = TaskBoard: gigs, events, challenges)
   systems/EconomySystem.js   money, shop, LQ, skills (+ systems/economy/)
 scripts/  fetch-osm.mjs, build-map.mjs, cities.mjs, landmarks.mjs, smoke-test.mjs
 data/aarhus/osm-raw.json   raw Overpass response (kept so the game works offline)
@@ -144,7 +144,8 @@ Units: world px, with `PX = 8` px per metre. Vehicle data is in metres and m/s. 
 | `HEAT_CHANGED` | `{ heat, level, prevLevel, reason }` | police | HUD |
 | `BUST_PROGRESS` | `{ t }` (0..1) | police | HUD |
 | `BUSTED` | `{ fine }` | police | GameScene (respawn at police station), missions (fail), HUD |
-| `JOB_OFFERED` / `JOB_STARTED` / `JOB_STAGE` / `JOB_COMPLETED` / `JOB_FAILED` | `{ job, contact? , stageIndex?, payout?, reason? }` | missions | HUD |
+| `JOB_OFFERED` / `JOB_STARTED` / `JOB_STAGE` / `JOB_COMPLETED` / `JOB_FAILED` | `{ job, contact? , stageIndex?, payout?, reason? }`; fired **per job** (several can be active), `job.kind` is `order`, `mission`, `gig`, `challenge`, `event` or `shift` | missions | HUD, challenges |
+| `tasks:*` (`TASKS_EV`, also exported from `core/events.js`) | `changed {}` (active list, tracking or board changed), `tracked {job}`, `gigSpawned {gig}`, `eventStarted {event}`, `eventEnded {event}`, `challengeOffered {challenge}` | missions/tasks | HUD, job app |
 | `traffic:honk` (`TRAFFIC_EV.HONK`) | `{ x, y, vehicle }` | traffic | police/anyone |
 | `traffic:pedestrianDown` (`PED_DOWN`) | `{ x, y, killed, byPlayer, vehicle }` | traffic | anyone |
 | `traffic:carPanic` (`CAR_PANIC`) | `{ vehicle, mode: flee\|angry }` | traffic | anyone |
@@ -159,8 +160,8 @@ Units: world px, with `PX = 8` px per metre. Vehicle data is in metres and m/s. 
 | `economy:*` vehicles | `vehicleBought {type, price, shop}`, `vehicleRented {type, days, price, shop, endsAt}`, `rentalEnded {type, shop}`, `vehicleRepaired {type, cost}`, `insurance {premium, paid}` | economy (VehicleService) | HUD, dealer overlay |
 | `mission:accepted` (`MISSION_EV.ACCEPTED`) | `{ job }` | missions | HUD |
 | `mission:offerCancelled` (`OFFER_CANCELLED`) | `{ job, reason: declined\|left\|busy }` | missions | HUD |
-| `mission:target` (`TARGET`) | `{ x, y, name, action, stageIndex, job }` or `{ job: null }` | missions | HUD/minimap |
-| `mission:timer` (`TIMER`) | `{ job, timeLeft, timeLimit }` (about 4x/s) | missions | HUD |
+| `mission:target` (`TARGET`) | `{ x, y, name, action, stageIndex, job }` or `{ job: null }`: the **tracked** job's target | missions | HUD/minimap |
+| `mission:timer` (`TIMER`) | `{ job, timeLeft, timeLimit }` (about 4x/s, one stream per running job) | missions | HUD |
 | `mission:loading` (`LOADING`) | `{ job, t }` | missions | HUD |
 | `mission:cargo` (`CARGO`) | `{ job, damage, integrity }` | missions | HUD |
 | `mission:hint` (`HINT`) | `{ text }` | missions | HUD |
@@ -198,17 +199,18 @@ session.state = {
   skills: { driving, stamina, charm, streetSmarts, navigation }, // EconomySystem
   purchases: { [itemId]: count }, ownedVehicles: [], // EconomySystem; no-theft games start with ['bike'], spawned at the home door each session
   heat,                                               // PoliceSystem (transient, 0..5.99)
-  job, contactCooldowns: { [contactId]: ms },         // MissionSystem (job is transient; stale clocks reset on load)
+  job, contactCooldowns: { [contactId]: ms },         // MissionSystem (job = the TRACKED job, transient; stale clocks reset on load)
+  tasks: { tracked, active: [job], events: [event], cd: { [kind]: gameMinute } }, // MissionSystem/TaskBoard (saved): persisted active jobs (orders, gigs, challenges, event tasks), running city events, event cooldowns
   missions: { levels: { [template]: completedCount } }, // MissionSystem (saved)
   economy: { clock, cooldowns, week, lastWeek, insured, rentals: [{ uid, type, endsAt, shop }], rentalSeq, lastWakeDay }, // EconomySystem (clock = in-game minutes, new game starts Monday 08:00; week = running income/cost summary; saved)
   player: { x, y, health },                           // GameScene (written on save)
-  stats: { deliveries, missions, stolen, busted, knockouts, earned, playSeconds }, // each module increments its own counters
+  stats: { deliveries, missions, gigs, stolen, busted, knockouts, earned, playSeconds }, // each module increments its own counters
   savedAt,
 }
 ```
 
 - Read effective skills with `skillLevel(state, key)` (purchased level plus character bonus). Skill effects: driving gives speed/grip/steer (already applied in Player), stamina gives run speed and max health (applied in Player), charm gives payouts, streetSmarts gives heat gain/decay, navigation gives time limits.
-- Saves: localStorage key `aarhus-express:v1:<city>:<character>`, wrapped in try/catch. GameScene autosaves every 30 s, on `REQUEST_SAVE`, and on shutdown. `job` and `heat` are never saved.
+- Saves: localStorage key `aarhus-express:v1:<city>:<character>`, wrapped in try/catch. GameScene autosaves every 30 s, on `REQUEST_SAVE`, and on shutdown. `job` (the tracked pointer) and `heat` are never saved; the persisted jobs live in `tasks.active`.
 
 ## File ownership
 
@@ -253,10 +255,16 @@ Art is wired in: runtime files live in `public/art/` (manifest.json, vehicles, c
 | E | enter or exit a vehicle; with theft on it also steals (the driver is ejected); with theft off only owned, rented or job vehicles work ("Not your vehicle") |
 | H | horn |
 | Esc / P | pause (controls help, Q = save and quit) |
-| B / K / M / J | shop / skills / map overlays / the phone job app (courier, taxi and bus tabs) |
+| B / K / M / J | shop / skills / map overlays / the phone job app (courier, taxi, bus and Tasks tabs; 1-4 or Left/Right switch tabs) |
+| Tab | cycle the **tracked** task (arrow, HUD card and minimap line follow it) |
+| E at a gig pin | see the gig's offer (Y accepts, N refuses); works on foot and while riding |
+| Up/Down/Enter/X (map M) | select a task pin, accept or track it, abandon the selected active task; click works too |
+| Up/Down, Enter, X (job app, Tasks tab) | choose, track an active task or accept a nearby one, abandon the selected active task |
 | E at the home door / on a vehicle-shop pad | home overlay (sleep, pay rent, garage, move) / dealer overlay (buy, rent, repair) |
 | D (in the job app) | decline the selected courier order |
 | Y / N | accept / refuse a job offer (MissionSystem only; orders auto-accept after 8 s) |
+
+Note: **T** (next radio station) is unrelated to Tab (track task).
 
 ### Walking presentation
 
@@ -278,19 +286,22 @@ The default game is a **realistic courier life with no crime**. Crime is opt-in 
 
 ### `src/core/options.js` (lead-only)
 
-`state.options = { theft: false, criminalMissions: false, mayhem: false }`, saved per save, never changed after new-game time.
+`state.options = { theft, criminalMissions, mayhem, infiniteMoney, noDrivingBan }` (all false by default), saved per save, never changed after new-game time. The first three are the **crime options**; `infiniteMoney` and `noDrivingBan` are **comfort/cheat options** (`group: 'comfort'` in `OPTION_INFO`, shown below the Start button in NewGameScene under "COMFORT / CHEATS"). Comfort options do not count as crime: `isRealistic()` looks at the crime options only, so "Realistic courier: no crime" still shows with cheats on (the continue-screen tags list them as "Cheat: ..."). Keyboard order in NewGameScene: crime toggles, Start, then the cheats (Down x3 + Enter still starts a default game).
 
 | export | meaning |
 |---|---|
 | `opt(name)` | one option of the live session |
 | `crimeEnabled()` | `theft \|\| criminalMissions` |
 | `pursuitEnabled()` | `= crimeEnabled()`: police heat, pursuit, roadblocks and busting are active only then |
-| `isRealistic(options?)`, `optionTags(state)` | all off; small tag strings for the continue screen |
+| `isRealistic(options?)`, `optionTags(state)` | all crime options off; small tag strings for the continue screen |
+| `CRIME_IDS`, `COMFORT_IDS` | option ids per group |
 | `playerMayUse(v)` | theft on, or `v.owned`, `v.rentedBy === 'player'`, `v.jobVehicle`, or the target car of a criminal mission (`tag === 'mission'` with criminalMissions on) |
 | `contactEnabled(c)` | legal contacts always, criminal ones only with criminalMissions |
 | `OPTION_INFO`, `OPTION_IDS`, `REALISTIC` | UI text; tunables (`towFee` 300 kr, `towDelaySec` 6) |
 
-**Legacy saves** (no `state.options`) load with all three options ON and `state.optionsLegacy = true` (continue screen tag "Classic: all options on"). Brand-new games never have `optionsLegacy`.
+**Comfort options.** `infiniteMoney`: `EconomySystem.pay()` keeps the balance at 1,000,000,000 (`fmtKr` and the HUD show "kr ∞" for balances of 900 M or more); negative payments (purchases, rent, rental, insurance, fines, tow, hospital) skip the deduction but still emit `MONEY_CHANGED` and the pager lines and count in the weekly spending summary; income still adds up and counts in `stats.earned`. `noDrivingBan`: `Licence.addClips` keeps counting clips (shown, decaying as usual) and fines apply, but `banned` is always false and no `ban` licence event fires, so `Player.tryEnter` and the dealer never refuse cars.
+
+**Legacy saves** (no `state.options`) load with all three crime options ON (and both comfort options off) and `state.optionsLegacy = true` (continue screen tag "Classic: all options on"). Brand-new games never have `optionsLegacy`.
 
 ### Gating rules (what each option does)
 
@@ -331,10 +342,48 @@ Built by `scripts/fetch-transport.mjs` (Overpass, separate from the main extract
 ## Realistic mode: systems (jobs, rules, home, vehicles)
 
 ### Careers (`ctx.systems.missions.careers`, `src/systems/missions/careers/`)
-Used by `scenes/JobAppScene.js` (key **J**, three tabs: Bybud courier, Midtby Taxa taxi, bus). Courier: `courier.offers`, `courier.rating` (1..5), `accept(id)`, `decline(id)`, `pickupMetres(offer)`. Taxi: `taxi.signUp()`, `startShift()`, `endShift()`, `shift`. Bus: `bus.signUp()`, `routes()`, `startShift(routeIdx)`, `endShift()`, `shift`, `aheadBehind()`. Common: `levelInfo(career)`, `shiftActive()`, `summary()`, `abortShift(reason)` (ends any running shift from outside; GameScene uses it when a shift vehicle breaks down: no repair, the company tows it). Shift vehicles are `jobVehicle: true`. Taxi and bus pay through `REQUEST_PAY`; courier offers become ordinary MissionSystem orders.
+Used by `scenes/JobAppScene.js` (key **J**, four tabs: Bybud courier, Midtby Taxa taxi, bus, Tasks). Courier: `courier.offers`, `courier.rating` (1..5), `accept(id)`, `decline(id)`, `pickupMetres(offer)`. Taxi: `taxi.signUp()`, `startShift()`, `endShift()`, `shift`. Bus: `bus.signUp()`, `routes()`, `startShift(routeIdx)`, `endShift()`, `shift`, `aheadBehind()`. Common: `levelInfo(career)`, `shiftActive()`, `summary()`, `abortShift(reason)` (ends any running shift from outside; GameScene uses it when a shift vehicle breaks down: no repair, the company tows it). Shift vehicles are `jobVehicle: true`. Taxi and bus pay through `REQUEST_PAY`; courier offers become ordinary MissionSystem orders.
 
 Courier pickups: on a bike or on foot offers come from restaurants within about 800 m (`COURIER.pickupRangeBikeM`; widens 15% per retry only when nothing is nearby), in a car up to 1,600 m.
 Fines and jobs: every `police:ticket` with `ratingPenalty > 0` pushes one bad score into the courier rating (penalty 15 is about -0.3 stars; `state.jobs.courier.lastTicket` is shown in the app) and a ticket while a taxi passenger is aboard removes the tip of that fare.
+
+### Tasks: active list, gigs, events, challenges (`MissionSystem`, `systems/missions/tasks/`, `data/tasks.js`)
+
+**Active list (MissionSystem).** `missions.jobs` holds up to 4 accepted jobs (`TASKS.maxActive`), each with its own state machine, stage, timer and per-job load progress (`job._loadT`). One is **tracked** (`missions.trackedId`); `state.job` / `missions.job` is the tracked job, `targetPoint()` returns its target, and the waypoint arrow, minimap line and HUD order card follow it. Tab cycles tracking (`cycleTrack`), `track(id)` sets it, a new order or gig becomes tracked when accepted (challenges and the "head to event" task do not take tracking unless nothing is tracked), and when the tracked job ends the next one with a target takes over. API: `addJob(job, { track })`, `canAccept(descOrJob)`, `abandon(jobOrId)`, `progress(job)` (count stages), `failJob`, `completeJob`, `taskList()` (cached rows for the HUD and the app), `slotsUsed()`, `capacityUsed()`, `abandonPenalty(job)`. Existing events still fire per job; `startJob`, `shiftStage`, `finishShift` keep working for the careers. `careers.*` use `missions.jobOfCareer('taxi'|'courier'|'bus')` instead of `missions.job`.
+
+Rules:
+- **Slots:** 4 total. A taxi shift that is waiting for fares holds one slot (a fare or bus shift is one job). The list shows a row per job (plus a pseudo row for an idle taxi shift).
+- **Shifts are exclusive:** a taxi or bus shift cannot start while orders or gigs are active ("Finish or abandon your orders and gigs before a shift"), and while a shift runs no order or gig can be accepted ("You are on a shift"). Taxi fares of the running shift are fine. Challenges and the event "head there" task are passive and always allowed while a slot is free.
+- **Capacity is shared:** a pickup needs `vehicle capacity - cargo already loaded for other jobs >= its size` (on foot capacity is 1, a van 6 or 8, a cargo bike 2). The HUD hint says how much room is free.
+- **Failure is per task:** a timer expiry or abandon fails only that job. Death and busting fail every job except challenges and event tasks.
+- **Abandon penalties (shown in the app):** courier order = a failed delivery in the rating; gig = none, or -1 LQ once you hold their things; contact mission = 45 s cooldown; taxi fare = failed fare; shift = the shift penalty.
+- **Persistence:** jobs with `persist: true` (courier orders, gigs, challenges, event tasks) are written to `state.tasks.active` every second and on every change, and restored on load with their stage, timer and tracked flag. Contact missions, taxi and bus shifts and steal orders hold vehicle references and are **intentionally not saved**. Available gigs/offers are regenerated; running city events and their cooldowns are saved.
+- **New stage actions:** `visit` (reach the marker), `wait` (stay for `loadTime` s), `hold` (survive: the timer ends in success), `count` (progress from events). `job.fixed` pays `reward * (0.9 + 0.2 * time fraction)` through Charm with no tip, plus `job.lq`.
+
+**TaskBoard (`missions.board`)** owns what can be accepted: `gigs`, `challenges`, `events`, and `entries()` (one list sorted by distance: gigs, courier offers, taxi stands (and a live hail), the nearest bus lines' first stops, events, challenges) and `pins()` (positions for the minimap, full map and world pins). `acceptEntry(entry)` accepts any of them. Debug/test hooks: `forceGig(tpl)`, `spawnGig(opts)`, `forceChallenge(tpl)`, `startEvent(kind)`.
+
+**Street gigs** (`tasks/gigs.js`, 12 templates: groceries for a neighbour, forgotten laptop to Aarhus Universitet, jump-start, dog walk through a park (3 waypoints), flyer run (4 corners), sofa (capacity 2), prescription from a local apotek, library books to Dokk1, birthday cake, flat tyre, flowers, tourist from Aarhus H, parcel from a kiosk). Places are real Aarhus POIs and landmarks, people and dogs are fictional, each template falls back to another when the area has no matching place. Walk or ride up (9 m) and press **E** for the offer card, **Y** accepts.
+- Spawn: the board keeps **4-6 gigs within 600 m** of the player and **at least one within 250 m** (about 30 s of riding at 7.5 m/s), checks every 1.5 s, refills 1 per check (2-3 when fewer than 4 are near, a burst of up to 6 at start), hard cap 9, gigs live 170-300 s and are dropped when left more than 1.5 km behind. With an event within 1.4 km, 40% of spawns go inside its area.
+- Pay: 40-200 kr (jump-start 40-62, groceries 45-75, flyers 60-95, dog walk 70-110, laptop 85-125, tourist 90-135, sofa 130-200) and sometimes +1 LQ, times (1 + event boost). Countdown starts at accept: about `distance / 4.2 m/s x 1.55 + 45 s + 12 s per stage`.
+- Pager pings for new gigs within 420 m are throttled to one per 40 s.
+
+**City events** (`data/tasks.js` `EVENT_RULES`, scheduled on the economy clock; 1 real s = 1 game minute; weekday 0 = Monday, the game starts Monday 08:00; checked every 3 s with a per-check chance):
+
+| event | when | where | length | boost | taxi surge |
+|---|---|---|---|---|---|
+| Rain | any time, about 1 per 30 real min, 5 h cooldown | citywide | 2-4 h | +30% | x1.25; grip x0.82 on all vehicles |
+| Concert | Wed-Sun 20:30-22:30 | Train or Musikhuset (260 m) | about 3 h | +50% | x1.5 |
+| AGF match | Sat-Sun 12:30-15:00 | Ceres Park (420 m) | about 3.5 h | +40% | x1.4 |
+| Bar rush | Thu-Sat 21:00-23:30 (Friday +60%, others +45%) | Latinerkvarteret or Jaegergaardsgade (380 m) | about 4 h | +45-60% | x1.45-1.6 |
+| Julemarked | December (game day 0 is 1 Dec 2025, so the first 24 game days) 11:30-16:00 | Store Torv by the Domkirke (300 m) | about 5 h | +35% | x1.3 |
+
+An event announces itself with a pager line and a HUD banner "EVENT: ...", a glowing disc on the world, minimap and full map, and a chip in the HUD task stack with the time left. Inside the area (rain: everywhere) courier offers (`o.event`, reward x (1 + pay), up to 2 extra offers per event, offers 40% faster), gigs and taxi fares (hails are pulled to the area, meter x surge, title "Taxa x1.5") pay more. "Head there" (accept an event in the list) adds a small passive task with a 25 kr arrival bonus.
+
+**Quick challenges** (`tasks/challenges.js`): one is offered every 150-260 s (first after 40 s, max 2 on offer, offer lives 150 s) by pager and in the Tasks tab: reach a landmark in N s (about 60-100 kr, +1 LQ), ride the Ringgaden (5 checkpoints, 150 kr, +2 LQ), no red lights for 10 min (100 kr, +2 LQ; only `redLight` tickets fail it), 5 deliveries with no fine (140 kr; any fine fails it), 3 deliveries in Frederiksbjerg (120 kr). They count `job:completed` (orders) and `police:ticket`.
+
+**UI.** HUD: a compact stack under the money panel (icon by type, short name, distance or progress, countdown orange under 60 s and red under 15 s, tracked row highlighted, event chips below). Minimap: pins by type, event discs, dim rings for other active targets, a line to the tracked target. Job app **Tasks** tab: active rows (Enter tracks, X abandons, penalty shown) then a Nearby list sorted by distance (Enter accepts). Full map **M**: all pins, event areas, legend, Up/Down selects, Enter accepts or tracks, X abandons, details panel, mouse clicks.
+
+**Balance of tasks.** A courier order is about 100 kr (+30-60% in an event area). Gigs pay 40-200 kr for 1-5 minutes of work, so the same 60-80 kr per minute as a courier order, with no pickup waiting; challenges pay 60-150 kr plus LQ for something you would do anyway. Events lift earnings by about a third while they last. Fines (bike red light 400 kr) still cost more than one gig.
 
 ### Traffic rules and police (`src/systems/police/traffic/`, `TrafficSystem.signals/limits`)
 - Signals API: `traffic.signals.approach(from,to)`, `stateOf(ap)` (0 green, 1 amber, 2 red), `redAge(ap)`, `nearby(x,y,r,out)`. Limits API: `traffic.limits.get(a,b)` km/h; AI cruises at the posted limit x 0.82..1.02 and stops at red.

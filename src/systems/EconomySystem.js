@@ -60,6 +60,7 @@
  */
 import { listen, EV, bus, pager } from '../core/events.js';
 import { skillLevel } from '../core/state.js';
+import { opt } from '../core/options.js';
 import { getShop } from '../data/shop.js';
 import { SKILLS, SKILL_MAX, SKILL_INFO, SKILL_COSTS, SKILL_EFFECTS, PRIMARY } from './economy/skills.js';
 import { ECON_EV, LICENCE_EV } from './economy/events.js';
@@ -129,6 +130,15 @@ export class EconomySystem {
     amount = Math.round(Number(amount) || 0);
     if (!amount) return;
     const before = st.money;
+    if (opt('infiniteMoney')) { // payments never lower the balance; income still adds up and every event/pager line stays the same
+      if (st.money < 9e8) st.money = 1e9;
+      if (amount < 0) {
+        const wk0 = st.economy.week;
+        if (wk0) { const c = cat || 'other'; wk0.spent[c] = (wk0.spent[c] || 0) - amount; }
+        bus.emit(EV.MONEY_CHANGED, { money: st.money, delta: amount, reason });
+        return;
+      }
+    }
     st.money = Math.max(0, before + amount);
     const delta = st.money - before;
     if (delta > 0) st.stats.earned += delta;
