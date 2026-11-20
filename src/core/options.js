@@ -1,0 +1,86 @@
+// Game options: the opt-in "crime" toggles chosen once when a NEW game starts.
+//
+// The default game is a realistic courier life with NO crime. Every option is OFF by default and is
+// stored in `state.options` (persisted per save, never changed after new-game time).
+//
+//   theft            vehicle theft: steal parked or driven vehicles; every stolen vehicle offers a delivery order.
+//   criminalMissions Ravn's smuggling / hot-car jobs and Sille's steal-to-order (the criminal contacts).
+//   mayhem           hitting pedestrians and exploding cars are allowed with no rating or job penalty.
+//
+// Police pursuit and heat are NOT an option of their own: they are active only when theft or
+// criminalMissions is on (pursuitEnabled()). With everything off, police only enforce traffic rules.
+//
+// LEGACY SAVES: a save written before options existed has no `state.options`. loadSave() gives it all
+// three options ON (the old game) and sets `state.optionsLegacy = true`, so the continue screen can show
+// a "Classic (old save)" tag. Brand-new games never get optionsLegacy.
+//
+// Everything here reads `session.state`, so it works anywhere (systems, entities, scenes) without ctx.
+// OWNER: lead only (shared file, specialists request changes).
+import { session } from './state.js';
+
+/** Option ids in display order, with UI text (NewGameScene, continue tags). */
+export const OPTION_INFO = [
+  {
+    id: 'theft', label: 'Vehicle theft', tag: 'Theft',
+    desc: 'Steal parked or driven vehicles with E. Every stolen vehicle offers a delivery order. Brings police heat.',
+  },
+  {
+    id: 'criminalMissions', label: 'Criminal missions', tag: 'Crime jobs',
+    desc: 'Ravn\'s smuggling and hot-car jobs, and Sille\'s steal-to-order. Brings police heat.',
+  },
+  {
+    id: 'mayhem', label: 'Mayhem', tag: 'Mayhem',
+    desc: 'Run over pedestrians and blow up cars with no rating or job penalty. Off: wrecks are towed and injuries are fined.',
+  },
+];
+export const OPTION_IDS = OPTION_INFO.map((o) => o.id);
+
+export const noOptions = () => ({ theft: false, criminalMissions: false, mayhem: false });
+export const allOptions = () => ({ theft: true, criminalMissions: true, mayhem: true });
+
+/** Tunables of the realistic (mayhem-off) rules. */
+export const REALISTIC = {
+  towFee: 300, // kr, charged once via REQUEST_PAY reason 'tow'
+  towDelaySec: 6, // seconds between the breakdown and the tow truck finishing
+};
+
+/** Read one option of the live session (false when no game is running). */
+export function opt(name) {
+  return !!session.state?.options?.[name];
+}
+
+/** Any crime option on: theft or criminalMissions. */
+export function crimeEnabled() {
+  return opt('theft') || opt('criminalMissions');
+}
+
+/** Police heat / pursuit / roadblocks / busting are active only when crime is possible. */
+export function pursuitEnabled() {
+  return crimeEnabled();
+}
+
+/** True when every option is off: the default "Realistic courier: no crime" game. */
+export function isRealistic(options = session.state?.options) {
+  return !!options && OPTION_IDS.every((id) => !options[id]);
+}
+
+/** Active option tags for a save/state, for the small tag chips (continue screen, character select). */
+export function optionTags(state) {
+  const o = state?.options;
+  if (!o) return [];
+  if (state.optionsLegacy) return ['Classic: all options on'];
+  const tags = OPTION_INFO.filter((i) => o[i.id]).map((i) => i.tag);
+  return tags.length ? tags : ['Realistic courier'];
+}
+
+/** May the player get into / use this vehicle? With theft off: only owned, rented or job vehicles
+ *  (plus the target car of an active criminal mission when criminalMissions is on). */
+export function playerMayUse(v) {
+  if (opt('theft') || v.owned || v.rentedBy === 'player' || v.jobVehicle) return true;
+  return v.tag === 'mission' && opt('criminalMissions'); // a criminal mission's target car may be taken (that is the job)
+}
+
+/** Criminal contacts are hidden and disabled unless criminalMissions is on. Legal contacts always stay. */
+export function contactEnabled(c) {
+  return !!c.legal || opt('criminalMissions');
+}

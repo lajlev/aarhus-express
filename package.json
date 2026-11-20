@@ -1,0 +1,22 @@
+{
+  "name": "aarhus-express",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "fetch-map": "node scripts/fetch-osm.mjs",
+    "fetch-transport": "node scripts/fetch-transport.mjs",
+    "build-map": "node scripts/build-map.mjs",
+    "check": "node scripts/smoke-test.mjs"
+  },
+  "dependencies": {
+    "phaser": "3.80.1"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.56.1",
+    "vite": "5.4.11"
+  }
+}

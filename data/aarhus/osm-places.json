@@ -1,0 +1,210 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-11-19T21:29:23Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 3578035686,
+  "lat": 56.1528895,
+  "lon": 10.2169402,
+  "tags": {
+    "name": "Mellemarmen",
+    "place": "locality"
+  }
+},
+{
+  "type": "node",
+  "id": 5636204313,
+  "lat": 56.1644022,
+  "lon": 10.2243612,
+  "tags": {
+    "name": "Aarhus Ø",
+    "place": "quarter",
+    "population": "3940",
+    "wikidata": "Q3934854"
+  }
+},
+{
+  "type": "node",
+  "id": 10269028805,
+  "lat": 56.1337501,
+  "lon": 10.1869616,
+  "tags": {
+    "name": "Rosenvænget",
+    "place": "quarter"
+  }
+},
+{
+  "type": "node",
+  "id": 10269028806,
+  "lat": 56.1302023,
+  "lon": 10.1864097,
+  "tags": {
+    "name": "Præstevangen",
+    "place": "neighbourhood"
+  }
+},
+{
+  "type": "node",
+  "id": 10274168899,
+  "lat": 56.1434136,
+  "lon": 10.1979970,
+  "tags": {
+    "name": "Frederiksbjerg",
+    "place": "suburb"
+  }
+},
+{
+  "type": "node",
+  "id": 10274718175,
+  "lat": 56.1722595,
+  "lon": 10.2160034,
+  "tags": {
+    "name": "Trøjborg",
+    "place": "quarter"
+  }
+},
+{
+  "type": "node",
+  "id": 10989426495,
+  "lat": 56.1605378,
+  "lon": 10.1947044,
+  "tags": {
+    "name": "Blomsterdalen",
+    "place": "locality"
+  }
+},
+{
+  "type": "node",
+  "id": 11816203152,
+  "lat": 56.1375971,
+  "lon": 10.2128297,
+  "tags": {
+    "name": "Bryggen",
+    "place": "locality"
+  }
+},
+{
+  "type": "node",
+  "id": 13572738703,
+  "lat": 56.1529992,
+  "lon": 10.2052581,
+  "tags": {
+    "name": "Reginakrydset",
+    "place": "locality"
+  }
+},
+{
+  "type": "node",
+  "id": 14065811927,
+  "lat": 56.1422845,
+  "lon": 10.1856302,
+  "tags": {
+    "name": "Langenæs",
+    "place": "quarter",
+    "wikidata": "Q12323731",
+    "wikimedia_commons": "Category:Langenæs"
+  }
+},
+{
+  "type": "way",
+  "id": 41849207,
+  "center": {
+    "lat": 56.1629289,
+    "lon": 10.2124555
+  },
+  "tags": {
+    "loc_name": "Nørrebro",
+    "name": "Nørre Stenbro",
+    "place": "neighbourhood",
+    "wikidata": "Q12329676",
+    "wikimedia_commons": "Category:Nørre_Stenbro",
+    "wikipedia": "en:Nørre Stenbro"
+  }
+},
+{
+  "type": "way",
+  "id": 108957445,
+  "center": {
+    "lat": 56.1728612,
+    "lon": 10.2055777
+  },
+  "tags": {
+    "name": "Nobelparken",
+    "name:etymology:wikidata": "Q23810",
+    "place": "neighbourhood",
+    "wikidata": "Q12329098",
+    "wikipedia": "da:Nobelparken"
+  }
+},
+{
+  "type": "way",
+  "id": 161200240,
+  "center": {
+    "lat": 56.1625181,
+    "lon": 10.2037476
+  },
+  "tags": {
+    "alt_name": "Øgaderne",
+    "name": "Øgadekvarteret",
+    "place": "neighbourhood",
+    "wikidata": "Q16325151",
+    "wikimedia_commons": "Category:Øgadekvarteret (Aarhus)",
+    "wikipedia": "da:Øgadekvarteret (Aarhus)"
+  }
+},
+{
+  "type": "way",
+  "id": 671072537,
+  "center": {
+    "lat": 56.1557271,
+    "lon": 10.1915051
+  },
+  "tags": {
+    "landuse": "residential",
+    "name": "Ceres Byen",
+    "place": "quarter",
+    "website": "http://ceresbyen.dk/",
+    "wikipedia": "da:Ceres Byen"
+  }
+},
+{
+  "type": "way",
+  "id": 1106091494,
+  "center": {
+    "lat": 56.1585882,
+    "lon": 10.2098424
+  },
+  "tags": {
+    "name": "Latinerkvarteret",
+    "name:da": "Latinerkvarteret",
+    "name:en": "Latin Quarter",
+    "place": "neighbourhood",
+    "wikidata": "Q6496462",
+    "wikimedia_commons": "Category:Latinerkvarteret,_Aarhus",
+    "wikipedia": "en:Latinerkvarteret, Aarhus"
+  }
+},
+{
+  "type": "way",
+  "id": 1112712814,
+  "center": {
+    "lat": 56.1549888,
+    "lon": 10.2059107
+  },
+  "tags": {
+    "name": "Midtbyen",
+    "place": "neighbourhood",
+    "wikidata": "Q6843051",
+    "wikimedia_commons": "Category:Midtbyen (Aarhus)",
+    "wikipedia": "da:Midtbyen (Aarhus)"
+  }
+}
+
+  ]
+}

@@ -1,0 +1,206 @@
+{
+  "vehicles": {
+    "bus": {
+      "src": "art-source/vehicles/bus_trim.png",
+      "game": "art/vehicles/bus_64.png",
+      "w": 64,
+      "h": 201
+    },
+    "cargo_bike": {
+      "src": "art-source/vehicles/cargo_bike_trim.png",
+      "game": "art/vehicles/cargo_bike_64.png",
+      "w": 64,
+      "h": 186
+    },
+    "city_bike": {
+      "src": "art-source/vehicles/city_bike_trim.png",
+      "game": "art/vehicles/city_bike_48.png",
+      "w": 48,
+      "h": 163
+    },
+    "city_bike_rider": {
+      "src": "art-source/vehicles/city_bike_rider_trim.png",
+      "game": "art/vehicles/city_bike_rider_64.png",
+      "w": 64,
+      "h": 133
+    },
+    "delivery_van": {
+      "src": "art-source/vehicles/delivery_van_trim.png",
+      "game": "art/vehicles/delivery_van_64.png",
+      "w": 64,
+      "h": 115
+    },
+    "hatchback": {
+      "src": "art-source/vehicles/hatchback_trim.png",
+      "game": "art/vehicles/hatchback_64.png",
+      "w": 64,
+      "h": 97
+    },
+    "police_car": {
+      "src": "art-source/vehicles/police_car_trim.png",
+      "game": "art/vehicles/police_car_64.png",
+      "w": 64,
+      "h": 129
+    },
+    "scooter": {
+      "src": "art-source/vehicles/scooter_trim.png",
+      "game": "art/vehicles/scooter_64.png",
+      "w": 64,
+      "h": 135
+    },
+    "tram": {
+      "src": "art-source/vehicles/tram_trim.png",
+      "game": "art/vehicles/tram_64.png",
+      "w": 64,
+      "h": 353
+    }
+  },
+  "characters": {
+    "art_student": {
+      "src": "art-source/characters/art_student_trim.png",
+      "game": "art/characters/art_student_48.png",
+      "small": "art/characters/art_student_32.png"
+    },
+    "barista": {
+      "src": "art-source/characters/barista_trim.png",
+      "game": "art/characters/barista_48.png",
+      "small": "art/characters/barista_32.png"
+    },
+    "dock_worker": {
+      "src": "art-source/characters/dock_worker_trim.png",
+      "game": "art/characters/dock_worker_48.png",
+      "small": "art/characters/dock_worker_32.png"
+    },
+    "pedestrian": {
+      "src": "art-source/characters/pedestrian_trim.png",
+      "game": "art/characters/pedestrian_48.png",
+      "small": "art/characters/pedestrian_32.png"
+    },
+    "police_officer": {
+      "src": "art-source/characters/police_officer_trim.png",
+      "game": "art/characters/police_officer_48.png",
+      "small": "art/characters/police_officer_32.png"
+    },
+    "superfan": {
+      "src": "art-source/characters/superfan_trim.png",
+      "game": "art/characters/superfan_48.png",
+      "small": "art/characters/superfan_32.png"
+    },
+    "tram_driver": {
+      "src": "art-source/characters/tram_driver_trim.png",
+      "game": "art/characters/tram_driver_48.png",
+      "small": "art/characters/tram_driver_32.png"
+    }
+  },
+  "tiles": {
+    "asphalt": {
+      "src": "art-source/tiles/asphalt.png",
+      "game": "art/tiles/asphalt_128.png",
+      "size": 128
+    },
+    "cobblestone": {
+      "src": "art-source/tiles/cobblestone.png",
+      "game": "art/tiles/cobblestone_128.png",
+      "size": 128
+    },
+    "grass": {
+      "src": "art-source/tiles/grass.png",
+      "game": "art/tiles/grass_128.png",
+      "size": 128
+    },
+    "pavement": {
+      "src": "art-source/tiles/pavement.png",
+      "game": "art/tiles/pavement_128.png",
+      "size": 128
+    },
+    "road_lanes": {
+      "src": "art-source/tiles/road_lanes.png",
+      "game": "art/tiles/road_lanes_128.png",
+      "size": 128
+    },
+    "roof_copper": {
+      "src": "art-source/tiles/roof_copper.png",
+      "game": "art/tiles/roof_copper_128.png",
+      "size": 128
+    },
+    "roof_flat_grey": {
+      "src": "art-source/tiles/roof_flat_grey.png",
+      "game": "art/tiles/roof_flat_grey_128.png",
+      "size": 128
+    },
+    "roof_red_tile": {
+      "src": "art-source/tiles/roof_red_tile.png",
+      "game": "art/tiles/roof_red_tile_128.png",
+      "size": 128
+    },
+    "water": {
+      "src": "art-source/tiles/water.png",
+      "game": "art/tiles/water_128.png",
+      "size": 128
+    }
+  },
+  "ui": {
+    "icon_heart": {
+      "src": "art-source/ui/icon_heart_trim.png",
+      "game": "art/ui/icon_heart_32.png"
+    },
+    "icon_heat": {
+      "src": "art-source/ui/icon_heat_trim.png",
+      "game": "art/ui/icon_heat_32.png"
+    },
+    "icon_money": {
+      "src": "art-source/ui/icon_money_trim.png",
+      "game": "art/ui/icon_money_32.png"
+    },
+    "icon_phone": {
+      "src": "art-source/ui/icon_phone_trim.png",
+      "game": "art/ui/icon_phone_32.png"
+    },
+    "marker_dropoff": {
+      "src": "art-source/ui/marker_dropoff_trim.png",
+      "game": "art/ui/marker_dropoff_64.png"
+    },
+    "marker_pickup": {
+      "src": "art-source/ui/marker_pickup_trim.png",
+      "game": "art/ui/marker_pickup_64.png"
+    }
+  },
+  "portraits": {
+    "art_student": {
+      "src": "art-source/portraits/art_student.png",
+      "game": "art/portraits/art_student_512.png"
+    },
+    "barista": {
+      "src": "art-source/portraits/barista.png",
+      "game": "art/portraits/barista_512.png"
+    },
+    "dock_worker": {
+      "src": "art-source/portraits/dock_worker.png",
+      "game": "art/portraits/dock_worker_512.png"
+    },
+    "superfan": {
+      "src": "art-source/portraits/superfan.png",
+      "game": "art/portraits/superfan_512.png"
+    },
+    "tram_driver": {
+      "src": "art-source/portraits/tram_driver.png",
+      "game": "art/portraits/tram_driver_512.png"
+    }
+  },
+  "keyart": {
+    "main": {
+      "src": "art-source/keyart/keyart_16x9_crop.png",
+      "game": "art/keyart/keyart_16x9_1280.png",
+      "raw": "art-source/keyart/keyart_16x9.png"
+    }
+  },
+  "_note": "\"src\"/\"raw\" paths are relative to the project root (art-source/, not shipped); \"game\"/\"small\" are relative to public/ and are what the game loads.",
+  "props": {
+    "bike_rack": {
+      "src": "art-source/props/bike_rack_trim.png",
+      "game": "art/props/bike_rack_192.png",
+      "w": 192,
+      "h": 35
+    }
+  }
+}

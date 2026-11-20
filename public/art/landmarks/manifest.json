@@ -1,0 +1,88 @@
+{
+  "landmarks": {
+    "lm_aarhush": {
+      "game": "art/landmarks/lm_aarhush.png",
+      "src": "art-source/landmarks/lm_aarhush.png",
+      "w": 768,
+      "h": 512,
+      "opaque": true
+    },
+    "lm_aros": {
+      "game": "art/landmarks/lm_aros.png",
+      "src": "art-source/landmarks/lm_aros.png",
+      "w": 768,
+      "h": 768,
+      "opaque": true
+    },
+    "lm_ceres": {
+      "game": "art/landmarks/lm_ceres.png",
+      "src": "art-source/landmarks/lm_ceres.png",
+      "w": 768,
+      "h": 431,
+      "opaque": false
+    },
+    "lm_cranes": {
+      "game": "art/landmarks/lm_cranes.png",
+      "src": "art-source/landmarks/lm_cranes.png",
+      "w": 768,
+      "h": 397,
+      "opaque": false
+    },
+    "lm_dokk1": {
+      "game": "art/landmarks/lm_dokk1.png",
+      "src": "art-source/landmarks/lm_dokk1.png",
+      "w": 768,
+      "h": 512,
+      "opaque": true
+    },
+    "lm_domkirke": {
+      "game": "art/landmarks/lm_domkirke.png",
+      "src": "art-source/landmarks/lm_domkirke.png",
+      "w": 768,
+      "h": 512,
+      "opaque": true
+    },
+    "lm_gamleby": {
+      "game": "art/landmarks/lm_gamleby.png",
+      "src": "art-source/landmarks/lm_gamleby.png",
+      "w": 640,
+      "h": 640,
+      "opaque": true
+    },
+    "lm_godsbanen": {
+      "game": "art/landmarks/lm_godsbanen.png",
+      "src": "art-source/landmarks/lm_godsbanen.png",
+      "w": 640,
+      "h": 640,
+      "opaque": true
+    },
+    "lm_isbjerget": {
+      "game": "art/landmarks/lm_isbjerget.png",
+      "src": "art-source/landmarks/lm_isbjerget.png",
+      "w": 640,
+      "h": 640,
+      "opaque": true
+    },
+    "lm_musikhuset": {
+      "game": "art/landmarks/lm_musikhuset.png",
+      "src": "art-source/landmarks/lm_musikhuset.png",
+      "w": 768,
+      "h": 512,
+      "opaque": true
+    },
+    "lm_radhus": {
+      "game": "art/landmarks/lm_radhus.png",
+      "src": "art-source/landmarks/lm_radhus.png",
+      "w": 768,
+      "h": 768,
+      "opaque": true
+    },
+    "lm_salling": {
+      "game": "art/landmarks/lm_salling.png",
+      "src": "art-source/landmarks/lm_salling.png",
+      "w": 768,
+      "h": 768,
+      "opaque": true
+    }
+  }
+}
