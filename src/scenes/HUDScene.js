@@ -520,7 +520,8 @@ export class HUDScene extends Phaser.Scene {
     const edge = urgent ? (flash ? C.red : C.ink3) : (pulse ? C.paper : C.ink3);
     panel(g, x0, y0, w, 138, { stroke: edge, accent: urgent ? C.red : C.orange });
     this.cardHead.setText(`${job.kind === 'mission' ? 'MISSION' : shift ? 'SHIFT' : 'ORDER'} · ${STAGE_LABEL[stage?.action] || 'GO'}`).setColor(S.orange).setVisible(true);
-    this.cardTitle.setText(job.title || '').setVisible(true);
+    const ttl = job.title || ''; // one line only: a wrapped title would overlap the destination
+    this.cardTitle.setText(ttl.length > 25 ? `${ttl.slice(0, 24)}…` : ttl).setVisible(true);
     this.cardDest.setText(stage?.name || '...').setColor(S.paper).setVisible(true).setWordWrapWidth(186);
     if (hasTimer) {
       if (behind) this.cardTimer.setText('LATE').setColor(S.gold).setVisible(true);

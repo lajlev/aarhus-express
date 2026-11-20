@@ -7,7 +7,7 @@ npm install
 npm run dev        # open http://127.0.0.1:5173/
 ```
 
-**The default game is a realistic courier life with no crime.** You rent a cheap basement room in Trøjborg (home marker on the map and minimap) and own a city bike parked at the door. You earn money from honest jobs (courier now; taxi and bus driving are being added) and later rent or buy better vehicles. Police only enforce traffic rules.
+**The default game is a realistic courier life with no crime.** You rent a cheap basement room in Trøjborg (home marker on the map and minimap) and own a city bike parked at the door. You earn money from honest jobs (courier, taxi shifts and bus routes) and later rent or buy better vehicles. Police only enforce traffic rules.
 
 Crime is opt-in. When you start a **new game** (after choosing a character) a toggles-only screen offers three game options, all OFF by default and fixed for that save:
 
@@ -17,7 +17,9 @@ Crime is opt-in. When you start a **new game** (after choosing a character) a to
 
 Police heat (1-5), pursuit, roadblocks and busting are active only when theft or criminal missions is on. Old saves (made before options existed) load with all options ON, and the continue screen tags them "Classic: all options on". Saves show their active options as small tags on the character select screen.
 
-Controls: WASD or arrows to walk and ride/drive, Shift to run, Space for the handbrake, E to get on/off a vehicle (with theft on it also steals), H for the horn, Y/N to accept or refuse a job, B shop, K skills, M map, J phone job board (coming soon), Esc to pause.
+Controls: WASD or arrows to walk and ride/drive, Shift to run, Space for the handbrake, E to get on/off a vehicle (with theft on it also steals), H for the horn, Y/N to accept or refuse a job, B shop, K skills, M map, J the phone job app (courier, taxi and bus tabs; D declines an order there), E at your door (home: sleep, pay rent, garage) or on a vehicle-shop pad (buy, rent, repair), Esc to pause.
+
+Realistic mode: pay weekly rent (1,200 kr, Monday), sleep at home, take courier orders from the Bybud app (your rating drops with traffic fines), rent a van or buy a vehicle at a dealer, drive company taxis and city buses on real Aarhus routes. Traffic lights and speed limits apply: AI obeys them, speed-camera vans and a patrol car fine you (red light, speeding, ramming, pavement, wrong way), three clips on the licence mean a short driving ban (bikes still allowed).
 
 Features: AI traffic and pedestrians, a home and an owned city bike, delivery orders and legal contact missions (food, moving, taxi); with options on: car stealing, heat levels 1-5 with pursuit, roadblocks and busting, and criminal missions (smuggling, hot cars, steal-to-order). Shop and Life Quality, skills, HUD with minimap, and autosave.
 

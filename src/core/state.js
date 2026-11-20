@@ -31,13 +31,13 @@ export function createInitialState(cityId, characterId, options) {
     // paidUntilDay: game day (economy clock) until which the rent is paid; the first week is prepaid.
     home: { id: 'basement', rentPerWeek: DEFAULT_RENT, paidUntilDay: 7, tier: 0, lateSince: null, evicted: false, remindedFor: null },
     // --- EconomySystem ---
-    money: ch?.startMoney ?? 250,
+    money: (ch?.startMoney ?? 250) + (options?.theft ? 0 : 250), // realistic start: 450-650 kr, first rent prepaid (see ARCHITECTURE Balance)
     lq: 0,
     skillPoints: 0,
     milestonesReached: 0,
     skills: Object.fromEntries(SKILLS.map((k) => [k, 0])),
     purchases: {}, // itemId -> count
-    economy: { clock: null, cooldowns: {}, week: null, lastWeek: null, insured: true, rentals: [], rentalSeq: 1, lastWakeDay: null },
+    economy: { clock: 8 * 60, cooldowns: {}, week: null, lastWeek: null, insured: true, rentals: [], rentalSeq: 1, lastWakeDay: null },
     jobs: {}, // careers state (courier/taxi/bus), filled by missions/careers/shared.js
     licence: { clips: 0, banLeft: 0, decayT: 0 }, // traffic-rules driving licence
     // --- PoliceSystem ---
@@ -73,7 +73,7 @@ export function loadSave(cityId, characterId) {
     // Old saves have no `options`: they load as the legacy all-ON game (see core/options.js).
     const legacy = !data.options;
     const options = legacy ? { theft: true, criminalMissions: true, mayhem: true } : { ...base.options, ...data.options };
-    return { ...base, ...data, options, optionsLegacy: legacy || !!data.optionsLegacy, home: { ...base.home, ...data.home }, economy: data.economy ? { ...base.economy, ...data.economy } : undefined, licence: { ...base.licence, ...data.licence }, skills: { ...base.skills, ...data.skills }, stats: { ...base.stats, ...data.stats }, job: null, heat: 0 };
+    return { ...base, ...data, options, optionsLegacy: legacy || !!data.optionsLegacy, home: { ...base.home, ...data.home }, economy: { ...base.economy, ...(data.economy || {}) }, licence: { ...base.licence, ...data.licence }, skills: { ...base.skills, ...data.skills }, stats: { ...base.stats, ...data.stats }, job: null, heat: 0 };
   } catch (err) {
     console.warn('loadSave failed', err);
     return null;

@@ -115,7 +115,7 @@ export class Player {
   nearestVehicle(vehicles) {
     let best = null, bd = Infinity;
     for (const v of vehicles) {
-      if (!v.drivable || v.driver === 'player' || v.def.stealable === false) continue;
+      if (!v.drivable || v.driver === 'player' || (v.def.stealable === false && !v.jobVehicle) || v.fotovogn) continue;
       const d = Math.hypot(v.x - this.x, v.y - this.y) - v.len / 2;
       if (d < ENTER_RANGE && d < bd) { bd = d; best = v; }
     }
@@ -130,7 +130,7 @@ export class Player {
       pager('Not your vehicle.', 'warn');
       return false;
     }
-    if (!v.def.bike && this.ctx.systems?.police?.isLicenceBanned?.()) {
+    if (!v.def.bike && this.scene.ctx?.systems?.police?.isLicenceBanned?.()) {
       pager('Licence suspended: no driving cars.', 'warn');
       return false;
     }

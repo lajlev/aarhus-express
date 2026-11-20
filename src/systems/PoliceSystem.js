@@ -196,6 +196,7 @@ export class PoliceSystem {
   _onStolen({ vehicle, method }) {
     const u = this.byVehicle.get(vehicle);
     if (u) { this._dropUnit(u, false); this.addHeat(T.crimeHeat.policeCarjack, 'policeCarjack'); return; }
+    if (vehicle.patrol || vehicle.def?.tex === 'veh-police') { this.addHeat(T.crimeHeat.policeCarjack, 'policeCarjack'); return; }
     this.addHeat(method === 'carjack' ? T.crimeHeat.carjack : T.crimeHeat.parkedTheft, method === 'carjack' ? 'carjack' : 'parkedTheft');
   }
 

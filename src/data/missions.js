@@ -96,11 +96,12 @@ export const COURIER = {
   maxMetres: [900, 1400, 2000, 2800, 3800], // longest restaurant -> home trip by career level
   minMetres: 250,
   sizeMax: [1, 1, 2, 2, 3], // largest order (capacity units) by level
-  payMul: 1.5, // on top of TUNING.payBase + payPerMetre
+  payMul: 1.85, // on top of TUNING.payBase + payPerMetre
   levelPay: [1.0, 1.1, 1.22, 1.36, 1.5],
   offerEvery: [14, 24], // seconds between new offers (random)
   offerLife: [90, 150], // seconds an offer stays listed
   pickupRangeM: [120, 1600],
+  pickupRangeBikeM: 800, // on a bike or on foot (widens only 15% per retry)
   startRating: 4.0,
   ratingWindow: 20, // last N delivery scores + last N accept/decline decisions
   items: ['Takeaway bag', 'Pizza boxes', 'Dinner for two', 'Sushi box', 'Burger menu', 'Kebab wrap', 'Dim sum basket', 'Ramen bowls', 'Cake box', 'Coffee tray'],

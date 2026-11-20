@@ -71,7 +71,7 @@ src/
   scenes/CitySelectScene.js
   scenes/CharacterSelectScene.js   picks a character; a save continues, no save goes to NewGameScene
   scenes/NewGameScene.js  toggles-only screen for the game options (all OFF by default), creates the state, starts Game
-  scenes/JobAppScene.js   phone job board overlay on J (STUB, JOBS specialist)
+  scenes/JobAppScene.js   phone job app overlay on J (courier, taxi, bus tabs)
   scenes/GameScene.js     world, player, vehicle registry, camera, systems loop, respawn, autosave
   scenes/HUDScene.js      HUD: money, LQ, heat, bust meter, order card, pager, minimap, banners, waypoint arrow
   scenes/OverlayScene.js  pause, shop (B), skills (K), map (M)
@@ -152,6 +152,11 @@ Units: world px, with `PX = 8` px per metre. Vehicle data is in metres and m/s. 
 | `police:searching` (`POLICE_EV.SEARCHING`) | `{ active, t, level, delay }` | police | HUD |
 | `police:pursuit` (`POLICE_EV.PURSUIT`) | `{ active, level, units }` | police | HUD |
 | `police:escaped` (`POLICE_EV.ESCAPED`) | `{ level }` (heat decayed to 0; not on bust/death) | police | missions (hotCar lose-the-police stage) |
+| `police:ticket` (`POLICE_EV.TICKET`) | `{ type, fine, clips, label, text, ratingPenalty, x, y, source: camera\|patrol\|auto, bike, speedKmh?, limitKmh? }`: a traffic fine was issued (already charged once via `REQUEST_PAY` reason `fine`) | traffic rules (police/traffic) | HUD (ticket popup), jobs (courier rating, taxi tip) |
+| `police:licence` (`POLICE_EV.LICENCE`) | `{ clips, banned, banLeft, maxClips, reason: clip\|ban\|ban-ended\|decay }` | traffic rules | HUD, economy (dealer), Player (refuses cars while banned) |
+| `jobs:*` (`JOBS_EV`, also exported from `core/events.js`) | `signedUp {career}`, `shiftStarted {career, shift}`, `shiftEnded {career, ok, reason, pay, shift}`, `fare {job, fare, tip, km, minutes, hardBrakes}`, `fareHail {job, where}`, `busStop {index, name, served, skipped, lateness, onTime, boarded, alighted}`, `offers {offers}`, `levelUp {career, level}`, `rating {rating}` | missions/careers | job app (J), HUD |
+| `economy:*` rent | `rentDue {amount, dueDay, stage: reminder\|due}`, `rentPaid {amount, paidUntilDay, auto, late}`, `rentLate {amount, daysLate, stage: late\|warning\|evicted}`, `slept {day, hour, lqGained, healed}`, `moved {tier, name, rent}`, `week {summary}` | economy (HomeService) | HUD, home overlay |
+| `economy:*` vehicles | `vehicleBought {type, price, shop}`, `vehicleRented {type, days, price, shop, endsAt}`, `rentalEnded {type, shop}`, `vehicleRepaired {type, cost}`, `insurance {premium, paid}` | economy (VehicleService) | HUD, dealer overlay |
 | `mission:accepted` (`MISSION_EV.ACCEPTED`) | `{ job }` | missions | HUD |
 | `mission:offerCancelled` (`OFFER_CANCELLED`) | `{ job, reason: declined\|left\|busy }` | missions | HUD |
 | `mission:target` (`TARGET`) | `{ x, y, name, action, stageIndex, job }` or `{ job: null }` | missions | HUD/minimap |
@@ -168,7 +173,7 @@ Units: world px, with `PX = 8` px per metre. Vehicle data is in metres and m/s. 
 | `PAGER` | `{ text, from?, kind?: info\|job\|warn\|crime }` | anyone (`pager()`) | HUD feed |
 | `PROMPT` | `{ text \| null }` | GameScene | HUD |
 | `BANNER` | `{ text, color?, ms? }` | anyone | HUD |
-| `OPEN_OVERLAY` | `{ mode: pause\|shop\|skills\|map\|jobs }` | anyone/keys | GameScene (pauses Game, launches Overlay) |
+| `OPEN_OVERLAY` | `{ mode: pause\|shop\|skills\|map\|jobs\|home\|dealer }` | anyone/keys | GameScene (pauses Game, launches Overlay) |
 | `OVERLAY_CLOSED` | `{}` | Overlay | anyone |
 | `GAME_READY` | `{ scene }` | GameScene | anyone |
 | `REQUEST_SAVE` / `SAVED` | `{}` | anyone / GameScene | |
@@ -186,14 +191,16 @@ session.state = {
   version, cityId, characterId,
   options: { theft, criminalMissions, mayhem },      // lead only; set once at new-game time, saved (core/options.js)
   optionsLegacy,                                      // true for an old save loaded as all-ON (continue screen tag)
-  home: { id, rentPerWeek, paidUntilDay },            // HOME & VEHICLES specialist owns rent logic; defaults 1200 kr/week, first week prepaid
+  home: { id, rentPerWeek, paidUntilDay, tier, lateSince, evicted, remindedFor }, // HomeService; 1200 kr/week, first week prepaid; lateSince = day rent became overdue (arrears, one week max), evicted locks sleep, remindedFor = day of the last reminder
+  jobs: { courier, taxi, bus },                       // careers (missions/careers/shared.js defaults): courier { xp, rating, scores, decisions, done, failed, declined, earned, lastTicket }, taxi { signed, xp, shifts, fares, earned, best }, bus { signed, xp, shifts, stops, earned, punctual }
+  licence: { clips, banLeft, decayT },                // traffic rules: clips on the licence, seconds of driving ban left, clean-driving timer
   money, lq, skillPoints, milestonesReached,         // EconomySystem
   skills: { driving, stamina, charm, streetSmarts, navigation }, // EconomySystem
   purchases: { [itemId]: count }, ownedVehicles: [], // EconomySystem; no-theft games start with ['bike'], spawned at the home door each session
   heat,                                               // PoliceSystem (transient, 0..5.99)
   job, contactCooldowns: { [contactId]: ms },         // MissionSystem (job is transient; stale clocks reset on load)
   missions: { levels: { [template]: completedCount } }, // MissionSystem (saved)
-  economy: { clock, cooldowns: { [itemId]: minute } },  // EconomySystem (created lazily, saved)
+  economy: { clock, cooldowns, week, lastWeek, insured, rentals: [{ uid, type, endsAt, shop }], rentalSeq, lastWakeDay }, // EconomySystem (clock = in-game minutes, new game starts Monday 08:00; week = running income/cost summary; saved)
   player: { x, y, health },                           // GameScene (written on save)
   stats: { deliveries, missions, stolen, busted, knockouts, earned, playSeconds }, // each module increments its own counters
   savedAt,
@@ -246,7 +253,9 @@ Art is wired in: runtime files live in `public/art/` (manifest.json, vehicles, c
 | E | enter or exit a vehicle; with theft on it also steals (the driver is ejected); with theft off only owned, rented or job vehicles work ("Not your vehicle") |
 | H | horn |
 | Esc / P | pause (controls help, Q = save and quit) |
-| B / K / M / J | shop / skills / map overlays / phone job board (stub) |
+| B / K / M / J | shop / skills / map overlays / the phone job app (courier, taxi and bus tabs) |
+| E at the home door / on a vehicle-shop pad | home overlay (sleep, pay rent, garage, move) / dealer overlay (buy, rent, repair) |
+| D (in the job app) | decline the selected courier order |
 | Y / N | accept / refuse a job offer (MissionSystem only; orders auto-accept after 8 s) |
 
 ### Walking presentation
@@ -294,7 +303,7 @@ The default game is a **realistic courier life with no crime**. Crime is opt-in 
 ### Home and start
 
 - `src/data/home.js` picks a real four-storey apartment block in Trøjborg by lat/lon (HOME & VEHICLES specialist may change it). `world.resolveHome(cfg)` snaps it to the nearest building polygon and finds the door on the street side. Result: `world.home` = `ctx.home` = `{ id, name, street, district, x, y, bx, by, angle, parkX, parkY }` (door and parking spot in world px, `angle` = door direction towards the street).
-- `state.home = { id, rentPerWeek: 1200, paidUntilDay: 7 }`. Rent, sleep and the home overlay are not built yet: only the data, the marker (`world/HomeMarker.js`, minimap house icon, map overlay icon) and access are provided. The day counter semantics belong to the HOME & VEHICLES specialist (economy clock).
+- `state.home = { id, rentPerWeek: 1200, paidUntilDay: 7 }`. Rent, sleep and the home overlay are built (see **Realistic mode: systems** below). The owned-vehicle parking spot (`parkX/parkY`) is 4.5 m to the side of the door so that E at the door (home overlay) never grabs the bike.
 - **Theft off** (realistic start): the player spawns at the home door and every id in `state.ownedVehicles` is spawned owned along the pavement (new games start with `['bike']`). **Theft on** (classic start and legacy saves): spawn at the Rådhus with the starter hatchback; the home still exists and is drawn.
 
 ### Map data for the specialists (public/maps/aarhus.json, World API)
@@ -317,3 +326,42 @@ Built by `scripts/fetch-transport.mjs` (Overpass, separate from the main extract
 - **JOBS:** `MissionSystem` public API plus `JobAppScene` (J). Work in realistic games comes only from legal contacts and the job board. Use `jobVehicle: true` for vehicles a job supplies (bus, taxi) via `ctx.spawnVehicle(type, x, y, { jobVehicle: true })`. Bus stops and routes come from the World API.
 - **TRAFFIC RULES & POLICE:** `police/traffic/index.js` hook, `world.speedLimitAt`, `getTrafficSignals`, `TRAFFIC_EV.INJURY`, `VEHICLE_BROKEN/TOWED`. HUD (`HUDScene`) already hides the heat widget when `!pursuitEnabled()`: put the speed-limit sign and fines feed there.
 - **HOME & VEHICLES:** `state.home`, `world.home`, `getVehicleShops()`, `Vehicle` `owned`/`rentedBy`. Spawn bought or rented vehicles with `ctx.spawnVehicle(type, x, y, { owned: true })` or `{ rentedBy: 'player' }`. The flat tow fee in GameScene (`_onBroken`, constants in `REALISTIC`) is a placeholder for a real tow service: request changes from the lead.
+
+
+## Realistic mode: systems (jobs, rules, home, vehicles)
+
+### Careers (`ctx.systems.missions.careers`, `src/systems/missions/careers/`)
+Used by `scenes/JobAppScene.js` (key **J**, three tabs: Bybud courier, Midtby Taxa taxi, bus). Courier: `courier.offers`, `courier.rating` (1..5), `accept(id)`, `decline(id)`, `pickupMetres(offer)`. Taxi: `taxi.signUp()`, `startShift()`, `endShift()`, `shift`. Bus: `bus.signUp()`, `routes()`, `startShift(routeIdx)`, `endShift()`, `shift`, `aheadBehind()`. Common: `levelInfo(career)`, `shiftActive()`, `summary()`, `abortShift(reason)` (ends any running shift from outside; GameScene uses it when a shift vehicle breaks down: no repair, the company tows it). Shift vehicles are `jobVehicle: true`. Taxi and bus pay through `REQUEST_PAY`; courier offers become ordinary MissionSystem orders.
+
+Courier pickups: on a bike or on foot offers come from restaurants within about 800 m (`COURIER.pickupRangeBikeM`; widens 15% per retry only when nothing is nearby), in a car up to 1,600 m.
+Fines and jobs: every `police:ticket` with `ratingPenalty > 0` pushes one bad score into the courier rating (penalty 15 is about -0.3 stars; `state.jobs.courier.lastTicket` is shown in the app) and a ticket while a taxi passenger is aboard removes the tip of that fare.
+
+### Traffic rules and police (`src/systems/police/traffic/`, `TrafficSystem.signals/limits`)
+- Signals API: `traffic.signals.approach(from,to)`, `stateOf(ap)` (0 green, 1 amber, 2 red), `redAge(ap)`, `nearby(x,y,r,out)`. Limits API: `traffic.limits.get(a,b)` km/h; AI cruises at the posted limit x 0.82..1.02 and stops at red.
+- Fines (`police/traffic/config.js` `RULES`): red light 2,000 kr (bike 1,000), speeding 1,000-4,000, ramming 1,500, pavement 800, wrong way 1,500 (bike 500), injury 8,000, kill 25,000, driving while banned 3,000, **all multiplied by `RULES.FINE_SCALE` (0.4)**. Clips: 3 clips on the licence is a 240 s ban on cars (bikes stay allowed; `Player.tryEnter` refuses non-bike vehicles while `police.isLicenceBanned()`); one clip decays per 600 s clean.
+- Speed cameras are parked "fotovogn" vans (`v.fotovogn`, mass 90 so they do not slide; never enterable and not stealable) and one AI patrol car (`v.patrol`). Players can never use either with theft off (`playerMayUse`). With theft on, stealing a patrol car adds `policeCarjack` heat.
+- HUD shows the posted speed-limit sign, a ticket popup, the clip count and the ban timer.
+
+### Home and rent (`economy/HomeService.js`)
+One real second is one in-game minute (a day is 24 real minutes, a week 2.8 hours). Rent 1,200 kr falls due Monday 00:00 (first week prepaid); reminder the day before; auto-debited when affordable, otherwise one week of arrears, then late (days 0-1), warning (2-3), evicted (day 4+: no sleep, -3 LQ per day) until paid. Sleep skips to 07:00, heals, +2 LQ. E at the door opens the home overlay (sleep, pay rent, garage, housing upgrades to Frederiksbjerg 2,400 kr/week and Aarhus Ø).
+
+### Vehicles (`economy/vehicles/VehicleService.js`)
+E on a shop pad opens the dealer overlay: buy (one per type, spawns owned at the door each session), rent 1-3 days (saved in `state.economy.rentals`, removed at `endsAt`), repair (12 kr per missing health point, half price while insured), weekly insurance for owned cars and scooters. Vehicles are `owned`, `rentedBy: 'player'` or `jobVehicle`; broken-down owned or rented vehicles are towed (300 kr, 6 s), broken job vehicles end the shift.
+
+### Balance (realistic but fun)
+Measured on a production build (25 random start nodes x 3 offers; bike, theft off):
+
+| quantity | value |
+|---|---|
+| pickup distance (straight line, bike) | avg about 600 m, up to about 800 m (1.4 km only when the area has no restaurant) |
+| delivery distance | avg about 575 m |
+| bike speed | max 7.5 m/s, about 5.5 m/s average in town with stops |
+| reward per delivery | about 81 kr at `payMul 1.5`; **raised to `COURIER.payMul` 1.85 giving about 100 kr** (+ about 10% tip) |
+| time per delivery | about 1,360 m route / 5.5 m/s = 250 s |
+| deliveries per in-game day (1,440 s) | about 5.5 non-stop, about 3.5 at a realistic 60% duty |
+| courier income | about 550 kr per day working non-stop, about 350 kr at 60% duty |
+
+Decisions:
+- `RULES.FINE_SCALE = 0.4`: a bike red light costs 400 kr (about 0.7-1.1 days of courier income), a car red light 800 kr (1.5-2 days at 60% duty, about 1.5 non-stop), speeding 400-1,600 kr, injury 3,200 kr. A fine always stings but money floors at 0 (no debt) and the bike plus the job app always earn again, so there is no soft-lock. Realistic raw amounts stay visible in the config for the full-scale mode (`FINE_SCALE 1`).
+- Starting money in realistic games is the character value plus 250 kr (450-650 kr): about one early fine of buffer, low enough to need work. The first week of rent is prepaid.
+- Rent 1,200 kr per week is about 25-35% of one week of steady courier play (2.8 real hours at 350-550 kr per day gives 2,450-3,850 kr), so about 1-1.5 hours of working covers it and leaves room for insurance, repairs and a van rental.

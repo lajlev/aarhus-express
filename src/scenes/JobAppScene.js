@@ -99,13 +99,15 @@ export class JobAppScene extends Phaser.Scene {
       const r = c.courier.rating, full = Math.round(r);
       this.T(x0 + 28, y0 + 158, '★'.repeat(full) + '☆'.repeat(5 - full), { size: 20, color: S.gold });
       this.T(x0 + 150, y0 + 162, `${r.toFixed(1)} rating · ${st.jobs.courier.done} delivered · ${c.courier.targetCount()} orders max`, { size: 13, color: S.muted });
+      const lt = st.jobs.courier.lastTicket;
+      if (lt) this.T(x0 + 28, y0 + 182, `Last fine: ${lt.label} (rating -${lt.drop.toFixed(2)})`, { size: 12, color: S.red || '#ff7a6b' });
     } else {
       const j = st.jobs[key];
       this.T(x0 + 28, y0 + 162, key === 'taxi' ? `${j.fares} fares · ${fmtKr(j.earned)} earned · ${j.shifts} shifts` : `${j.stops} stops · ${j.punctual} punctual · ${j.shifts} shifts`, { size: 13, color: S.muted });
     }
 
     // status card
-    const cy = y0 + 190;
+    const cy = y0 + 200;
     g.fillStyle(C.ink2, 1).fillRoundedRect(x0 + 20, cy, W - 40, 74, 14);
     const lines = this.status(key);
     this.T(x0 + 34, cy + 8, lines[0], { bold: true, size: 15, color: lines[3] || S.paper });

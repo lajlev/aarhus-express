@@ -8,8 +8,9 @@
 // Rating 1..5 (state.jobs.courier.rating): mean of the last 20 delivery scores (on time, fast, damage) blended with the
 // accept/decline rate. A higher rating gives more offers (2..5), better pay (+8% per star above 3) and bigger tips.
 import { PX } from '../../../config.js';
-import { bus } from '../../../core/events.js';
+import { bus, listen, pager } from '../../../core/events.js';
 import { TUNING, LEVELS, COURIER, CHAIN_RE } from '../../../data/missions.js';
+import { POLICE_EV } from '../../police/tuning.js';
 import { JOBS_EV } from '../events.js';
 import { rnd, pick, dist, clamp, levelInfo, addXp, routeMetres, streetName } from './shared.js';
 
@@ -28,6 +29,26 @@ export class Courier {
     this.pool = w.pois.filter((p) => (p.k === 'food' || p.k === 'cafe') && p.n && !CHAIN_RE.test(p.n) && !seen.has(p.n) && seen.add(p.n));
     this.hubs = COURIER.hubs.map((id) => w.landmark(id)).filter(Boolean);
     this._dmg = 0;
+    listen(this.ctx.scene, POLICE_EV.TICKET, (t) => this.onTicket(t));
+  }
+
+  /** A traffic fine docks the rating: ratingPenalty 15 is about -0.3 stars (as one bad score entry). */
+  onTicket(t) {
+    const pen = t?.ratingPenalty || 0;
+    if (pen <= 0) return;
+    const st = this.st;
+    const before = st.rating;
+    // push bad score entries (a heavy fine may need up to 3, since one entry is floored at 1 star) until the target drop is reached
+    for (let k = 0; k < 3 && before - st.rating < pen / 50 - 0.005; k++) {
+      const n = st.scores.length;
+      const avg = (st.scores.reduce((a, b) => a + b, 0) + COURIER.startRating * 2) / (n + 2);
+      const want = (pen / 50 - (before - st.rating)) / 0.8; // stars of average still to remove
+      st.scores.push(Math.round(clamp(avg - want * (n + 3), 1, 5) * 10) / 10);
+      while (st.scores.length > COURIER.ratingWindow) st.scores.shift();
+      this._recompute();
+    }
+    st.lastTicket = { label: t.label || 'fine', drop: Math.round((before - st.rating) * 100) / 100 };
+    pager(`Bybud: rating ${before.toFixed(2)} -> ${st.rating.toFixed(2)} (${t.label || 'traffic fine'})`, 'warn', 'Bybud');
   }
 
   get level() { return levelInfo(this.ctx.state, 'courier').level; }
@@ -48,7 +69,8 @@ export class Courier {
     const used = new Set(this.offers.map((o) => o.from.name));
     for (let attempt = 0; attempt < 6; attempt++) {
       const widen = 1 + attempt * 0.6;
-      const lo = COURIER.pickupRangeM[0] * PX, hi = COURIER.pickupRangeM[1] * widen * PX;
+      const slow = !pl.vehicle || pl.vehicle.def?.bike; // on foot or on a bike: shorter pickups
+      const lo = COURIER.pickupRangeM[0] * PX, hi = (slow ? COURIER.pickupRangeBikeM * (1 + attempt * 0.15) : COURIER.pickupRangeM[1] * widen) * PX;
       const cand = [];
       let tot = 0;
       for (const p of this.pool) {

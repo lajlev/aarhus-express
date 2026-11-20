@@ -241,6 +241,13 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (v._towing) return; // fee charged once per breakdown
+    if (v.jobVehicle) {
+      // taxi / bus shift vehicle: the shift ends, the company deals with the vehicle
+      this.systems.missions?.careers?.abortShift('vehicle broke down');
+      pager('Your shift vehicle broke down. The company tows it away and the shift is over.', 'warn', 'Dispatch');
+      this.time.delayedCall(6000, () => { if (!v.destroyed) { if (this.player.vehicle === v) this.player.exitVehicle(); this.removeVehicle(v); } });
+      if (!v.owned && v.rentedBy !== 'player') return;
+    }
     v._towing = true;
     const fee = REALISTIC.towFee, secs = REALISTIC.towDelaySec;
     pager(`Your ${v.def.name.toLowerCase()} broke down. A tow truck is on its way (kr ${fee}).`, 'warn', 'Tow service');

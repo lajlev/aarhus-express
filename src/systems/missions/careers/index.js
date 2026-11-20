@@ -5,12 +5,14 @@
 //     courier.accept(id) -> { ok, reason? }, courier.decline(id), courier.pickupMetres(offer)
 //   taxi.signed, taxi.signUp(), taxi.startShift() -> { ok, reason? }, taxi.endShift(), taxi.shift (or null)
 //   bus.signed,  bus.signUp(), bus.routes(), bus.startShift(routeIdx) -> { ok, reason? }, bus.endShift(), bus.shift (or null), bus.aheadBehind()
+//   abortShift(reason) -> bool (ends any running shift with that reason; used when the shift vehicle breaks down)
 //   levelInfo(career) -> { level, xp, base, next, frac };  shiftActive();  summary()
 // State: state.jobs = { courier: { xp, rating, scores, decisions, done, failed, declined, earned },
 //                       taxi: { signed, xp, shifts, fares, earned, best }, bus: { signed, xp, shifts, stops, earned, punctual } } (saved).
 // Events: JOBS_EV.* in systems/missions/events.js.
 import { listen, EV } from '../../../core/events.js';
 import { ensureJobsState, levelInfo } from './shared.js';
+import { POLICE_EV } from '../../police/tuning.js';
 import { Courier } from './courier.js';
 import { Taxi } from './taxi.js';
 import { BusCareer } from './bus.js';
@@ -23,6 +25,10 @@ export class Careers {
     this.courier = new Courier(this);
     this.taxi = new Taxi(this);
     this.bus = new BusCareer(this);
+    listen(this.ctx.scene, POLICE_EV.TICKET, () => {
+      const j = this.missions.job;
+      if (j?.passenger && j.loaded) j.ticketed = true; // a fine in front of the passenger cuts the tip
+    });
     listen(this.ctx.scene, EV.VEHICLE_DAMAGED, ({ vehicle, amount }) => {
       const j = this.missions.job;
       if (j?.career === 'courier' && j.loaded && vehicle === this.ctx.player.vehicle) this.courier.onDamaged(amount);
@@ -31,6 +37,12 @@ export class Careers {
   }
 
   levelInfo(career) { return levelInfo(this.ctx.state, career); }
+  /** End the running taxi/bus shift from outside (e.g. the shift vehicle broke down). True if a shift ended. */
+  abortShift(reason = 'shift ended') {
+    if (this.taxi.shift) { this.taxi._finish(false, reason); return true; }
+    if (this.bus.shift) { this.bus._finish(false, reason); return true; }
+    return false;
+  }
   shiftActive() { return !!(this.taxi.shift || this.bus.shift); }
   summary() { return { courier: this.ctx.state.jobs.courier, taxi: this.ctx.state.jobs.taxi, bus: this.ctx.state.jobs.bus, shift: this.taxi.shift || this.bus.shift || null }; }
 

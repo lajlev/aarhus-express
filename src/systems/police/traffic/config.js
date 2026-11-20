@@ -1,7 +1,7 @@
 // Traffic rules and fines: tuning. Fines in kr (Danish-style "boede"), distances in metres, times in seconds of play.
 export const RULES = {
   /** Multiplies every fine (1 = realistic Danish values). */
-  FINE_SCALE: 1,
+  FINE_SCALE: 0.4,
   // ---- driving licence: "klip i koerekortet" ----
   CLIPS_TO_BAN: 3, //     clips that trigger a temporary driving ban on cars (bikes stay allowed)
   BAN_SECONDS: 240, //    length of the ban

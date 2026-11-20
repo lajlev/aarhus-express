@@ -160,7 +160,7 @@ export class Taxi {
       payoutFn: (c, j, { frac, integ }) => {
         const base = Math.round(this.meterFare(j.meter.km, j.meter.minutes, s.level));
         const tipMul = c.systems?.economy?.getEffects?.().tips ?? 1;
-        const tip = integ > 0.6 && frac > 0.1 ? Math.round(base * TAXI.tipMax * integ * integ * Math.min(1, frac * 1.5) * tipMul * (0.6 + Math.random() * 0.4)) : 0;
+        const tip = !j.ticketed && integ > 0.6 && frac > 0.1 ? Math.round(base * TAXI.tipMax * integ * integ * Math.min(1, frac * 1.5) * tipMul * (0.6 + Math.random() * 0.4)) : 0;
         return { base, tip };
       },
     };
