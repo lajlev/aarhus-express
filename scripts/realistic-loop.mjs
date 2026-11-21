@@ -7,9 +7,10 @@ import { chromium } from 'playwright-core';
 import { existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { speedUp } from './test/lib/speed.mjs';
 
-const url = process.argv[2] || 'http://127.0.0.1:4173/';
-const shots = process.argv[3] || 'screenshots/realistic';
+const url = process.argv[2] || process.env.TEST_URL || 'http://127.0.0.1:4173/';
+const shots = process.argv[3] || process.env.SHOTS_DIR || 'screenshots/realistic';
 mkdirSync(shots, { recursive: true });
 function findChrome() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
@@ -21,7 +22,7 @@ function findChrome() {
   }
 }
 const browser = await chromium.launch({ executablePath: findChrome(), args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page = await speedUp(await browser.newPage({ viewport: { width: 1280, height: 720 } }));
 const errors = [];
 page.on('console', (m) => { if ((m.type() === 'error' || m.type() === 'warning') && !/GL Driver Message|GPU stall/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
 page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
@@ -124,7 +125,15 @@ check('red light: one fine, bike fine 400 kr (1,000 x FINE_SCALE 0.4)', !!red &&
 // fines are bills now: nothing is charged at the moment of the offence; the charge happens when the bill is paid
 const billsNow = await G(() => window.__game.scene.getScene('Game').ctx.systems.economy.bills.open().map((b) => ({ id: b.id, a: b.amount, k: b.kind, due: b.dueDay })));
 check('red light: the 400 kr fine is an OPEN bill (due in 7 days) and money was not charged yet', billsNow.some((b) => b.a === 400 && b.k === 'fine' && b.due === 7) && after.money >= before.money, { billsNow, before: before.money, after: after.money });
-const payRes = await G(() => { const e = window.__game.scene.getScene('Game').ctx.systems.economy; const m0 = window.__game.scene.getScene('Game').ctx.state.money; const owed = e.bills.total(); const n = e.bills.payAll(); return { n, owed, charged: m0 - window.__game.scene.getScene('Game').ctx.state.money }; });
+const payRes = await G(() => {
+  const g = window.__game.scene.getScene('Game'), e = g.ctx.systems.economy, st = g.ctx.state;
+  // the red-light fine is the bill under test; other bills (a traffic incident while riding) are reported but not part of this charge
+  const open = e.bills.open().map((b) => ({ id: b.id, a: b.amount, k: b.kind, l: b.label }));
+  const fine = e.bills.open().find((b) => b.kind === 'fine' && b.amount === 400);
+  const m0 = st.money, owed = fine ? e.bills.owed(fine) : 0;
+  const ok = fine ? e.bills.pay(fine.id).ok : false;
+  return { n: ok ? 1 : 0, owed, charged: m0 - st.money, open };
+});
 check('paying the bill(s) charges them in full (delayed charge)', payRes.n >= 1 && payRes.charged === payRes.owed && payRes.owed >= 400, payRes);
 check('courier rating dropped (about -0.04 per penalty point 2)', after.rating < before.rating, { before: before.rating, after: after.rating });
 await press('j'); await wait(500); await shot('09-jobapp-after-fine'); await press('Escape'); await wait(300);
@@ -212,9 +221,13 @@ await press('Enter'); await wait(400); // sign up
 await press('Enter'); await wait(1000); // first route
 const bs = await G(() => { const s = window.__game.scene.getScene('Game').ctx.systems.missions.careers.bus.shift; return s && { route: s.route.ref, stops: s.stops.length }; });
 check('bus: signed up and shift started on a real route', !!bs && bs.stops >= 3, bs);
-await G(() => { const g = window.__game.scene.getScene('Game'); const p = g.ctx.systems.missions.careers.bus.shift.vehicle.exitPoint(); g.player.x = p.x; g.player.y = p.y; });
-await wait(300); await press('e', 100); await wait(900);
-const inBus = await G(() => window.__game.scene.getScene('Game').player.vehicle?.type);
+let inBus = null;
+for (let attempt = 0; attempt < 3 && inBus !== 'bus'; attempt++) { // setup: a passing car can be nearer to the player than the bus when E is pressed
+  await G(() => { const g = window.__game.scene.getScene('Game'); const p = g.ctx.systems.missions.careers.bus.shift.vehicle.exitPoint(); g.player.x = p.x; g.player.y = p.y; });
+  await wait(300); await press('e', 100); await wait(900);
+  inBus = await G(() => window.__game.scene.getScene('Game').player.vehicle?.type);
+  if (inBus && inBus !== 'bus') await G(() => window.__game.scene.getScene('Game').player.exitVehicle());
+}
 check('bus: entered the bus (job vehicle)', inBus === 'bus', inBus);
 for (let i = 1; i <= 3; i++) {
   const st = await G(() => { const j = window.__game.scene.getScene('Game').ctx.state.job; return j && j.stages[j.stageIndex]; });

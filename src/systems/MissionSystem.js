@@ -76,6 +76,7 @@ import { MarkerLayer } from './missions/markers.js';
 import { buildOrder, buildMission } from './missions/builders.js';
 import { Careers } from './missions/careers/index.js';
 import { TaskBoard } from './missions/tasks/TaskBoard.js';
+import { simNow } from '../core/timescale.js';
 
 const MAX = TASKS.maxActive;
 const isLight = (j) => j.kind === 'challenge' || j.kind === 'event'; // passive tasks: allowed alongside shifts, never blocked by them
@@ -97,7 +98,7 @@ export class MissionSystem {
     st.missions = st.missions || {};
     st.missions.levels = st.missions.levels || {};
     st.contactCooldowns = st.contactCooldowns || {};
-    const now = ctx.scene.time.now;
+    const now = simNow();
     for (const k of Object.keys(st.contactCooldowns)) if (st.contactCooldowns[k] > now + 3e5) st.contactCooldowns[k] = 0; // stale clock from an older session
 
     this.offer = null;
@@ -310,7 +311,7 @@ export class MissionSystem {
     const o = this.offer;
     if (!o) return;
     this.offer = null;
-    if (o.contact) this.ctx.state.contactCooldowns[o.contact.id] = this.ctx.scene.time.now + TUNING.contactCooldownDecline;
+    if (o.contact) this.ctx.state.contactCooldowns[o.contact.id] = simNow() + TUNING.contactCooldownDecline;
     if (o.gig) this.board.declined(o.gig);
     bus.emit(MISSION_EV.OFFER_CANCELLED, { job: o.job, reason });
   }
@@ -456,7 +457,7 @@ export class MissionSystem {
   }
 
   _hint(text) {
-    const now = this.ctx.scene.time.now;
+    const now = simNow();
     if (now - this._hintAt < 2500) return;
     this._hintAt = now;
     bus.emit(MISSION_EV.HINT, { text });
@@ -573,7 +574,7 @@ export class MissionSystem {
     if (j.template) {
       const lv = st.missions.levels;
       lv[j.template] = Math.max(lv[j.template] || 0, Math.min(j.level, TUNING.maxLevel));
-      st.contactCooldowns[j.contactId] = ctx.scene.time.now + TUNING.contactCooldownDone;
+      st.contactCooldowns[j.contactId] = simNow() + TUNING.contactCooldownDone;
       if (j.level < TUNING.maxLevel && lv[j.template] === j.level) pager(`Level ${j.level + 1} unlocked: ${TEMPLATES[j.template].title}`, 'job', j.contactName);
     }
     this._end(j);
@@ -585,7 +586,7 @@ export class MissionSystem {
     bus.emit(EV.JOB_FAILED, { job: j, reason });
     pager(`${j.title} failed: ${reason}`, 'warn', j.contactName || (j.kind === 'gig' ? 'Gigs' : 'Dispatch'));
     if (j.kind === 'gig' && j.loaded) { this.ctx.systems.economy?.addLQ?.(-1); pager('You let them down: -1 LQ', 'warn', 'Gigs'); }
-    if (j.contactId) this.ctx.state.contactCooldowns[j.contactId] = this.ctx.scene.time.now + TUNING.contactCooldownDecline;
+    if (j.contactId) this.ctx.state.contactCooldowns[j.contactId] = simNow() + TUNING.contactCooldownDecline;
     this.careers.onJobEnd(j, false, { reason });
     this._end(j);
   }

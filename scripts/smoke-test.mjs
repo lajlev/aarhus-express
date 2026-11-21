@@ -6,8 +6,9 @@ import { chromium } from 'playwright-core';
 import { existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { speedUp } from './test/lib/speed.mjs';
 
-const url = process.argv[2] || 'http://127.0.0.1:5173/';
+const url = process.argv[2] || process.env.TEST_URL || 'http://127.0.0.1:5173/';
 function findChrome() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
   const roots = [join(homedir(), 'Library/Caches/ms-playwright'), join(homedir(), '.cache/ms-playwright')];
@@ -23,9 +24,10 @@ function findChrome() {
   return undefined;
 }
 
-mkdirSync('screenshots', { recursive: true });
+const SHOTS = process.env.SHOTS_DIR || 'screenshots';
+mkdirSync(SHOTS, { recursive: true });
 const browser = await chromium.launch({ executablePath: findChrome(), args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page = await speedUp(await browser.newPage({ viewport: { width: 1280, height: 720 } }));
 const errors = [];
 page.on('console', (m) => { if ((m.type() === 'error' || m.type() === 'warning') && !/GL Driver Message|GPU stall/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
 page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
@@ -34,18 +36,18 @@ const hold = async (key, ms) => { await page.keyboard.down(key); await wait(ms);
 
 await page.goto(url);
 await wait(1500);
-await page.screenshot({ path: 'screenshots/1-city.png' });
+await page.screenshot({ path: `${SHOTS}/1-city.png` });
 await page.keyboard.press('Enter');
 await wait(600);
-await page.screenshot({ path: 'screenshots/2-character.png' });
+await page.screenshot({ path: `${SHOTS}/2-character.png` });
 await page.keyboard.press('Enter'); // character -> NewGameScene (new save)
 await wait(600);
-await page.screenshot({ path: 'screenshots/2b-newgame.png' });
+await page.screenshot({ path: `${SHOTS}/2b-newgame.png` });
 for (let i = 0; i < 3; i++) { await page.keyboard.press('ArrowDown'); await wait(150); } // down to "Start"
 await page.keyboard.press('Enter'); // all options off: realistic courier game
 await page.waitForFunction(() => window.__game?.scene.getScene('Game')?.player, null, { timeout: 20000 });
 await wait(1500);
-await page.screenshot({ path: 'screenshots/3-game.png' });
+await page.screenshot({ path: `${SHOTS}/3-game.png` });
 
 // teleport next to the nearest car, enter, and drive
 const info = await page.evaluate(() => {
@@ -68,11 +70,11 @@ const drive = await page.evaluate(() => {
   const v = g.player.vehicle;
   return v ? { speedKmh: Math.round(v.speedMps * 3.6), health: Math.round(v.health), x: Math.round(v.x), y: Math.round(v.y) } : null;
 });
-await page.screenshot({ path: 'screenshots/4-driving.png' });
+await page.screenshot({ path: `${SHOTS}/4-driving.png` });
 const fps = await page.evaluate(() => Math.round(window.__game.loop.actualFps));
 await page.keyboard.press('Escape');
 await wait(400);
-await page.screenshot({ path: 'screenshots/5-pause.png' });
+await page.screenshot({ path: `${SHOTS}/5-pause.png` });
 await browser.close();
 
 console.log(JSON.stringify({ ...info, entered, drive, fps, errors }, null, 2));

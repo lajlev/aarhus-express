@@ -3,9 +3,10 @@ import { chromium } from 'playwright-core';
 import { existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { speedUp } from './test/lib/speed.mjs';
 
-const url = process.argv[2] || 'http://127.0.0.1:5202/';
-const shots = process.argv[3] || 'screenshots';
+const url = process.argv[2] || process.env.TEST_URL || 'http://127.0.0.1:4173/';
+const shots = process.argv[3] || process.env.SHOTS_DIR || 'screenshots';
 const mode = process.argv[4] || 'realistic'; // realistic | classic
 function findChrome() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
@@ -18,7 +19,7 @@ function findChrome() {
 }
 mkdirSync(shots, { recursive: true });
 const browser = await chromium.launch({ executablePath: findChrome(), args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page = await speedUp(await browser.newPage({ viewport: { width: 1280, height: 720 } }));
 const errors = [];
 page.on('console', (m) => { if ((m.type() === 'error' || m.type() === 'warning') && !/GL Driver Message|GPU stall/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
 page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
@@ -158,7 +159,9 @@ if (cam.length) {
   const sx = c.x - Math.cos(c.a) * 60 * 8, sy = c.y - Math.sin(c.a) * 60 * 8;
   await place(sx, sy, c.a, 18); await wait(600); // let the van spawn
   await page.keyboard.down('w');
-  for (let i = 0; i < 24; i++) { await ev(({ c }) => { const v = window.T.g.player.vehicle; const ux = Math.cos(c.a), uy = Math.sin(c.a); const sp = 20 * 8; v.vx = ux * sp; v.vy = uy * sp; }, { c }); await wait(180); }
+  // Drive for 4.3 simulated seconds (24 x 180 ms at x1). Loop on game time, not iterations: each round trip costs real time, which is several sim seconds at x10.
+  const simT0 = await ev(() => window.__sim.simSeconds);
+  while ((await ev(() => window.__sim.simSeconds)) - simT0 < 4.3) { await ev(({ c }) => { const v = window.T.g.player.vehicle; if (!v) return; const ux = Math.cos(c.a), uy = Math.sin(c.a); const sp = 20 * 8; v.vx = ux * sp; v.vy = uy * sp; }, { c }); await wait(180); }
   await page.keyboard.up('w');
   await page.screenshot({ path: join(shots, 'camera.png') });
   results.camera = await ev(() => window.T.log.filter((t) => t.type === 'speeding').map((t) => ({ fine: t.fine, source: t.source, kmh: t.speedKmh, lim: t.limitKmh, clips: t.clips })));

@@ -5,6 +5,7 @@ import { WalkingVisual } from './WalkingVisual.js';
 import { PX, TEX_RES, DEPTH } from '../config.js';
 import { bus, EV, listen, pager } from '../core/events.js';
 import { skillLevel } from '../core/state.js';
+import { simNow } from '../core/timescale.js';
 
 const WALK = 4.2 * PX;
 const RUN = 7.5 * PX;
@@ -102,8 +103,8 @@ export class Player {
         const d = Math.sqrt(d2), nx = dx / d, ny = dy / d;
         this.x += nx * (rr - d); this.y += ny * (rr - d);
         const hitSpeed = (v.vx * nx + v.vy * ny) / PX; // vehicle speed towards player, m/s
-        if (hitSpeed > 4 && this.scene.time.now > (this._hitCooldown || 0)) {
-          this._hitCooldown = this.scene.time.now + 700;
+        if (hitSpeed > 4 && simNow() > (this._hitCooldown || 0)) {
+          this._hitCooldown = simNow() + 700;
           this.damage(hitSpeed * 2.5, 'vehicle');
           this.x += nx * hitSpeed * 0.3 * PX; this.y += ny * hitSpeed * 0.3 * PX;
         }

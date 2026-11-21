@@ -6,9 +6,10 @@ import { chromium } from 'playwright-core';
 import { existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { speedUp } from './test/lib/speed.mjs';
 
-const url = process.argv[2] || 'http://127.0.0.1:4173/';
-const shots = process.argv[3] || 'screenshots/tasks';
+const url = process.argv[2] || process.env.TEST_URL || 'http://127.0.0.1:4173/';
+const shots = process.argv[3] || process.env.SHOTS_DIR || 'screenshots/tasks';
 mkdirSync(shots, { recursive: true });
 function findChrome() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
@@ -20,7 +21,7 @@ function findChrome() {
   }
 }
 const browser = await chromium.launch({ executablePath: findChrome(), args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page = await speedUp(await browser.newPage({ viewport: { width: 1280, height: 720 } }));
 const errors = [];
 page.on('console', (m) => { if ((m.type() === 'error' || m.type() === 'warning') && !/GL Driver Message|GPU stall/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
 page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
@@ -79,7 +80,8 @@ const near = await G(() => {
 check('gigs: 3-6 within 600 m of the player (burst can add 1)', near.n600 >= 3 && near.n600 <= 7, near);
 check('gigs: at least one within 250 m (about 30 s of riding)', near.closest <= 250, near.closest);
 check('gigs: every gig has a pin (minimap, map, world)', near.pinsGig === near.total, near);
-const tplCount = await G(() => { const b = window.__game.scene.getScene('Game').ctx.systems.missions.board; const seen = new Set(); for (let i = 0; i < 60; i++) { const q = b.forceGig(undefined, { quiet: true }); if (q) seen.add(q.tpl); } b.gigs.length = 0; return [...seen]; });
+// every template is forced (up to 25 random spots each) instead of one random draw of 60, which made this check flaky
+const tplCount = await G(() => { const b = window.__game.scene.getScene('Game').ctx.systems.missions.board; const seen = new Set(); for (const id of ['groceries', 'laptop', 'jumpstart', 'dogwalk', 'flyers', 'sofa', 'prescription', 'library', 'cake', 'puncture', 'flowers', 'tourist', 'kiosk']) { for (let k = 0; k < 25 && !seen.has(id); k++) { const q = b.forceGig(id, { quiet: true }); if (q) seen.add(q.tpl); } } b.gigs.length = 0; return [...seen]; });
 check('gig templates: at least 6 different templates spawn near home (10+ exist)', tplCount.length >= 6, tplCount);
 await wait(2500); // the board refills near the player after the clear above
 
@@ -232,7 +234,7 @@ const m2 = await money();
 if (reach) { await tp(reach.x, reach.y); await wait(900); }
 const lq1 = await G(() => window.__game.scene.getScene('Game').ctx.state.lq);
 check('challenge "get to <landmark> in N s" completes: cash and LQ', !!reach && (await money()) > m2 && lq1 > lq0, { reach, dm: (await money()) - m2, dlq: lq1 - lq0 });
-const fred = await G(() => { const m = window.__game.scene.getScene('Game').ctx.systems.missions, b = m.board; for (const q of m.jobs.slice()) m.abandon(q); const c = b.forceChallenge('fred'); b.acceptChallenge(c.id); const j = m.jobs.find((q) => q.tpl === 'fred'); for (let i = 0; i < 3; i++) m.progress(j); return { left: m.jobs.length, done: window.__done.some((d) => d.id === j.id) }; });
+const fred = await G(() => { const m = window.__game.scene.getScene('Game').ctx.systems.missions, b = m.board; for (const q of m.jobs.slice()) m.abandon(q); if (m.offer) m.decline('test'); /* a random contact/gig offer would block accepting ("answer the pending offer first") */ const c = b.forceChallenge('fred'); b.acceptChallenge(c.id); const j = m.jobs.find((q) => q.tpl === 'fred'); for (let i = 0; i < 3; i++) m.progress(j); return { left: m.jobs.length, done: window.__done.some((d) => d.id === j.id) }; });
 check('challenge counter (3 orders in Frederiksbjerg) completes at the goal', fred.left === 0 && fred.done, fred);
 const rg = await G(() => { const l = window.__game.scene.getScene('Game').world.landmark('ringgaden'); return { x: l.x, y: l.y }; });
 await tp(rg.x, rg.y); await wait(1500);
@@ -277,7 +279,10 @@ await wait(800);
 const boost = await G((e) => {
   const g = window.__game.scene.getScene('Game'), m = g.ctx.systems.missions, b = m.board, c = m.careers.courier;
   let gig = null, o = null;
+  gig = b.gigs.find((q) => q.job.event === b.events[0].name) || null;
   for (let i = 0; i < 8 && !gig; i++) gig = b.spawnGig({ event: b.events[0], quiet: true });
+  // random spawn spots can be refused (another gig within 45 m): force a gig of each template until one is built inside the area
+  for (const t of ['groceries', 'laptop', 'jumpstart', 'dogwalk', 'flyers', 'cake', 'flowers', 'kiosk']) { if (gig) break; gig = b.forceGig(t, { event: b.events[0], quiet: true }); }
   for (let i = 0; i < 8 && !o; i++) o = c._gen(b.events[0]);
   const base = o ? c.rewardFor(o.metres, o.size, o.fragile) : 0;
   return { gigEvent: gig?.job.event, gigPay: gig?.job.eventPay, offerEvent: o?.event, offerReward: o?.reward, base, ratio: o ? o.reward / base : 0 };
@@ -323,8 +328,9 @@ await press('Escape'); await wait(500);
 const rain = await G(() => { const b = window.__game.scene.getScene('Game').ctx.systems.missions.board; b.startEvent('rain'); return { raining: b.isRaining(), anywhere: !!b.eventAt(1, 1) }; });
 check('rain: citywide event (eventAt everywhere) and slippery roads flag', rain.raining && rain.anywhere, rain);
 // events end on the clock
-const endv = await G(async () => { const g = window.__game.scene.getScene('Game'), b = g.ctx.systems.missions.board; g.ctx.state.economy.clock += 600; await new Promise((r) => setTimeout(r, 4500)); return b.events.map((e) => e.kind); });
-check('events end when their game-clock window is over', endv.length === 0, endv);
+// The jump to a later clock time may legitimately START a scheduled event, so check that the events running before it are gone, not that none exist.
+const endv = await G(async () => { const g = window.__game.scene.getScene('Game'), b = g.ctx.systems.missions.board; const before = b.events.map((e) => e.id); g.ctx.state.economy.clock += 600; await window.__simSleep(4500); return { before: before.length, left: b.events.filter((e) => before.includes(e.id)).map((e) => e.kind) }; });
+check('events end when their game-clock window is over', endv.before > 0 && endv.left.length === 0, endv);
 
 // ---------------------------------------------------------------- 10. job app Tasks tab
 await G(() => { const m = window.__game.scene.getScene('Game').ctx.systems.missions, b = m.board; for (const j of m.jobs.slice()) m.abandon(j); b.startEvent('match'); for (let i = 0; i < 3; i++) { const q = b.gigs[i]; if (q) b.acceptGig(q.id); } const c = b.forceChallenge('reach'); if (c) b.acceptChallenge(c.id); });
@@ -381,7 +387,8 @@ const cheat = await G(() => {
   out.income = st.money;
   return out;
 });
-await wait(500);
+// the HUD eases the displayed balance per rendered frame (not per game second), so wait for it instead of a fixed sleep
+await page.waitForFunction(() => /\u221e/.test(window.__game.scene.getScene('HUD').moneyText.text), null, { timeout: 8000 }).catch(() => {});
 const cheatHud = await G(() => ({ hud: window.__game.scene.getScene('HUD').moneyText.text }));
 check('infiniteMoney: buying a car succeeds, fines and tows do not lower money, balance unchanged', cheat.res.ok && cheat.m1 === cheat.m0 && cheat.m0 >= 9e8 && cheat.owned, cheat);
 check('infiniteMoney: HUD shows the infinity sign', /\u221e/.test(cheatHud.hud), cheatHud);

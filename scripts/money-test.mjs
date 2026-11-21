@@ -10,10 +10,11 @@ import { chromium } from 'playwright-core';
 import { existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { speedUp } from './test/lib/speed.mjs';
 import { SCRATCH, SLOT, BET, scratchPlay, slotPlay, mulberry32, rtpSim, analyticRtp } from '../src/systems/gambling/games.js';
 
-const url = process.argv[2] || 'http://127.0.0.1:4173/';
-const shots = process.argv[3] || 'screenshots/money';
+const url = process.argv[2] || process.env.TEST_URL || 'http://127.0.0.1:4173/';
+const shots = process.argv[3] || process.env.SHOTS_DIR || 'screenshots/money';
 mkdirSync(shots, { recursive: true });
 function findChrome() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
@@ -32,7 +33,7 @@ const check = (name, ok, info) => { if (ok) pass++; else fail++; console.log(`${
 const near = (a, b, tol = 0) => Math.abs(a - b) <= tol;
 
 async function newPage(ctx) {
-  const page = await ctx.newPage();
+  const page = await speedUp(await ctx.newPage());
   page.on('console', (m) => { if ((m.type() === 'error' || m.type() === 'warning') && !/GL Driver Message|GPU stall/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
   return page;
@@ -196,11 +197,22 @@ async function ensureCar() {
 await ensureCar();
 const cam = await A.G(() => window.__game.scene.getScene('Game').systems.police.trafficRules.cameraSpots().map((s) => ({ x: s.x, y: s.y, a: s.a })));
 async function camPass(c) {
+  let r = null;
+  for (let attempt = 0; attempt < 3; attempt++) { // a pass can miss the camera radius or the van spawn: retry after the camera cooldown (14 s of game time)
+    r = await camPass1(c);
+    if (r.speeding || r.hint) break;
+    await A.wait(15000);
+  }
+  return r;
+}
+async function camPass1(c) {
   await ensureCar();
   await A.G(() => { window.__ev.tickets.length = 0; window.__ev.pagers.length = 0; });
   await place(c.x - Math.cos(c.a) * 60 * 8, c.y - Math.sin(c.a) * 60 * 8, c.a, 18); await A.wait(600);
   await pageA.keyboard.down('w');
-  for (let i = 0; i < 24; i++) { await A.G(([a]) => { const v = window.__game.scene.getScene('Game').player.vehicle; v.vx = Math.cos(a) * 160; v.vy = Math.sin(a) * 160; }, [c.a]); await A.wait(180); }
+  // 4.3 simulated seconds (24 x 180 ms at x1); loop on game time because each round trip costs real time (several sim seconds at x10)
+  const t0 = await A.G(() => window.__sim.simSeconds);
+  while ((await A.G(() => window.__sim.simSeconds)) - t0 < 4.3) { await A.G(([a]) => { const v = window.__game.scene.getScene('Game').player.vehicle; if (!v) return; v.vx = Math.cos(a) * 160; v.vy = Math.sin(a) * 160; }, [c.a]); await A.wait(180); }
   await pageA.keyboard.up('w');
   return A.G(() => ({ speeding: window.__ev.tickets.filter((t) => t.type === 'speeding').length, hint: window.__ev.pagers.some((t) => /Speeding: no ticket/.test(t)) }));
 }
@@ -241,6 +253,7 @@ async function redPass(label) {
 async function redPass1() {
   await ensureCar();
   await pageA.waitForFunction((i) => { const S = window.__game.scene.getScene('Game').systems.traffic.signals; return S.stateOf(S.aps[i]) === 2 && S.redAge(S.aps[i]) > 1; }, ap.i, { timeout: 120000 });
+  await ensureCar(); // traffic can wreck a parked car while we wait for the red phase
   await A.G(() => { window.__ev.tickets.length = 0; window.__ev.pagers.length = 0; });
   await A.G(([ap]) => { const v = window.__game.scene.getScene('Game').player.vehicle; const sp = 9 * 8, bx = ap.sx - ap.dx * 14 * 8, by = ap.sy - ap.dy * 14 * 8; v.x = bx; v.y = by; v.angle = ap.ang; v.vx = Math.cos(ap.ang) * sp; v.vy = Math.sin(ap.ang) * sp; v.sprite.setPosition(bx, by).setRotation(ap.ang); }, [ap]);
   await pageA.keyboard.down('w'); await A.wait(2000); await pageA.keyboard.up('w'); await A.wait(500);

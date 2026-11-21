@@ -8,7 +8,10 @@ import { GameScene } from './scenes/GameScene.js';
 import { HUDScene } from './scenes/HUDScene.js';
 import { OverlayScene } from './scenes/OverlayScene.js';
 import { JobAppScene } from './scenes/JobAppScene.js';
+import { installTimeScale } from './core/timescale.js';
 import { GamblingScene } from './scenes/GamblingScene.js';
+
+installTimeScale(); // test speed mode: ?timescale=N / window.__setTimeScale(n)
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

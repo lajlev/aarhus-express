@@ -56,6 +56,7 @@ import { TRAFFIC_EV } from './traffic/events.js';
 import { T, TYPE_COLORS, RACK_SITES } from './traffic/config.js';
 import { TrafficSignals } from './traffic/Signals.js';
 import { EdgeLimits } from './traffic/Limits.js';
+import { simNow } from '../core/timescale.js';
 
 const MIX_CACHE = {};
 function mixList(mix) {
@@ -224,7 +225,7 @@ export class TrafficSystem {
     if (mode === 'angry') this.honk(v);
     bus.emit(TRAFFIC_EV.CAR_PANIC, { vehicle: v, mode });
     if (byPlayer) {
-      const now = this.ctx.scene.time.now;
+      const now = simNow();
       if (now > (this._ramCd.get(v) || 0)) {
         this._ramCd.set(v, now + 6000);
         bus.emit(EV.CRIME, { type: 'vehicleHit', severity: 1, x: v.x, y: v.y });

@@ -14,6 +14,10 @@ npm run check -- http://127.0.0.1:4173/   # smoke test the production build
 
 `npm run check` (scripts/smoke-test.mjs) clicks through city and character select, enters a car, drives it, opens pause, writes screenshots to `screenshots/` and prints JSON with console errors, FPS and driving state. It exits non-zero on any page error or console error. It needs a Chromium: it finds Playwright's cached browsers in `~/Library/Caches/ms-playwright` or `~/.cache/ms-playwright`, or you can set `CHROME_PATH`.
 
+**Testing.** `npm test` (quick check), `npm run test:changed` (plus the suites covering `git diff HEAD`) and `npm run test:all` (every full suite, before a deploy) run through `scripts/test/run.mjs`: one build, one `vite preview` per worker on ports 4301+, suites in parallel, results in `test-results/latest.json`. Suites and their `covers` globs live in `scripts/test/suites.mjs`.
+
+Test speed mode (`src/core/timescale.js`): `?timescale=N` or `window.__setTimeScale(n)` multiplies simulation time. `GameScene.update` asks `planFrame(deltaMs)` for `n` fixed substeps of at most 0.025 s (at most 10 per frame) and steps the player, vehicles, collisions, audio and every system `n` times; camera, map and effects run once per frame with the total dt. Scale 1 is exactly the old single step of min(delta, 0.05). `this.time.timeScale` follows the effective ratio so `delayedCall`/`addEvent` timers keep pace. Game-logic timestamps and cooldowns (missions, traffic ram cooldown, player hit cooldown, the `time` argument of `update(dt, time)`) use `simNow()`, never `scene.time.now`; HUD/Pager/tween timing stays real-time. `window.__sim = { scale, effective, simSeconds, frames }` lets tests wait for simulated time (`waitSim`, `waitGameMinutes`). If the machine cannot keep up, the effective scale drops but waits on `__sim` stay correct.
+
 **Definition of done for any change:** `npm run build` succeeds, `npm run check` reports `"errors": []`, and your system's feature works in a manual play test.
 
 Debug handle: `window.__game` is the Phaser game. `__game.scene.getScene('Game')` exposes `.player`, `.vehicles`, `.world`, `.systems` and `.ctx`.

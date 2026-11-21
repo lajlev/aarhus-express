@@ -37,10 +37,27 @@ npm run fetch-map && npm run fetch-transport && npm run build-map   # re-downloa
 ## Definition of done
 
 1. `npm run build` succeeds.
-2. `npm run check -- <url>` reports `"errors": []`, ideally against `npm run preview` (the dev server hot-reloads on every edit, which breaks long scripted tests).
+2. `npm test` (quick check) passes, plus `npm run test:changed` for the area you touched. Run `npm run test:all` before a deploy. See **Testing** below. (`npm run check -- <url>` still runs the single smoke test against a server you started; use `npm run preview`, because the dev server hot-reloads on every edit, which breaks long scripted tests.)
 3. The feature works in a play test. For visual changes, take a screenshot and **look at it**.
 4. Headless fps stays at 80 or above (it's about 110–120 today), including a heat-5 pursuit with full traffic.
 5. `ARCHITECTURE.md` and `README.md` are updated if you added events, state fields, controls or public APIs.
+
+## Testing
+
+Fast, targeted regression testing. The runner is `scripts/test/run.mjs`; the suites and the source paths they cover are listed in `scripts/test/suites.mjs`.
+
+| When | Command |
+| --- | --- |
+| After every change (quick check: `npm run build` + smoke + node unit tests) | `npm test` |
+| During work: quick check plus the suites whose source globs match `git diff HEAD` and untracked files | `npm run test:changed` |
+| Before a deploy: every `full` suite | `npm run test:all` |
+| One or more named suites / a tag | `node scripts/test/run.mjs --only money,tasks` / `--tag economy` (`--list` shows all) |
+
+- The runner builds once into a temp dir, starts one `vite preview` per worker on its own port (4301 and up, never 5173), runs suites in parallel (default min(4, cores/2) workers, `--jobs N`) and always stops its servers. It prints a table and writes `test-results/latest.json` plus a log per suite.
+- **Test speed mode:** `?timescale=N` in the URL (the runner's `--timescale N`, default 10, is passed to suites as `TIMESCALE`; `--timescale 1` is the old real-time run; per-suite limits are `maxScale` in the manifest) or `window.__setTimeScale(n)` runs the simulation N times faster in fixed substeps of at most 0.025 s (`src/core/timescale.js`, used by `GameScene.update`), so physics and collisions stay stable. Game-logic cooldowns use `simNow()`, not `scene.time.now`. `window.__sim.simSeconds` is the simulated time; at scale 1 everything behaves exactly as before.
+- Writing a suite: use `scripts/test/lib/game.mjs` (`openGame`, `newGame`, `waitGameMinutes`, `waitSim`) or, for older scripts, call `await speedUp(page)` from `scripts/test/lib/speed.mjs`: the game then runs at x1 while the script is busy and at xN only while it waits, and `page.waitForTimeout(ms)` still covers ms of simulated time, so the game state is the same as at x1, reached sooner. Never write loops that count iterations of a round trip (they cost real time); loop on `window.__sim.simSeconds`. Never use fixed real-time sleeps for game time, never loosen an assertion to make a suite pass at a higher scale: set a lower `maxScale` for that suite in the manifest and say why.
+- Take the URL from `argv[2]` / `TEST_URL`, write screenshots to `SHOTS_DIR` (the runner gives each suite its own), and exit non-zero on a failed check or a console error.
+- Add a new suite to `scripts/test/suites.mjs` with its `covers` globs and tags, or `--changed` will not select it.
 
 ## Code layout (short version)
 
@@ -98,7 +115,7 @@ When several agents (Claude and/or Codex) work at the same time:
 
 ## Repo notes
 
-- This folder is **not a git repository**. Don't run git commands unless the user asks for them.
+- This folder **is a git repository**. Don't commit, push or change branches unless the user asks. Read-only git (`git diff`, `git status`, `git ls-files`) is fine and `npm run test:changed` uses it.
 - The parent folder `/Users/lajlev/Sites/lillefar/` contains other unrelated projects. Stay inside `aarhus-express/`.
 - `node_modules/`, `dist/` and `screenshots/` are ignored, and `public/maps/aarhus.json` is generated.
 ## Shared task tracking and delegation (Codex + Claude Code)

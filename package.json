@@ -10,7 +10,10 @@
     "fetch-map": "node scripts/fetch-osm.mjs",
     "fetch-transport": "node scripts/fetch-transport.mjs",
     "build-map": "node scripts/build-map.mjs",
-    "check": "node scripts/smoke-test.mjs"
+    "check": "node scripts/smoke-test.mjs",
+    "test": "node scripts/test/run.mjs",
+    "test:changed": "node scripts/test/run.mjs --changed",
+    "test:all": "node scripts/test/run.mjs --all"
   },
   "dependencies": {
     "phaser": "3.80.1"

@@ -22,6 +22,7 @@ import { TrafficSystem } from '../systems/TrafficSystem.js';
 import { PoliceSystem } from '../systems/PoliceSystem.js';
 import { MissionSystem } from '../systems/MissionSystem.js';
 import { EconomySystem } from '../systems/EconomySystem.js';
+import { planFrame, seedSimClock, simNow } from '../core/timescale.js';
 
 /**
  * @typedef {object} GameCtx
@@ -63,6 +64,7 @@ export class GameScene extends Phaser.Scene {
     const state = session.state;
     if (!state) { this.scene.start('CharacterSelect', { cityId: this.cityId }); return; }
     const map = this.cache.json.get(`map-${this.cityId}`);
+    seedSimClock(this.time.now);
     this.world = new World(map);
     this.mapRenderer = new MapRenderer(this, this.world);
     this.minimap = this.mapRenderer.bakeMinimap('minimap', 1 / 32);
@@ -321,17 +323,23 @@ export class GameScene extends Phaser.Scene {
   // ---------------- loop ----------------
   update(time, deltaMs) {
     if (!this.world) return;
-    const dt = Math.min(deltaMs / 1000, 0.05);
-    session.state.stats.playSeconds += dt;
-    this.player.update(dt, this.vehicles);
-    for (const v of this.vehicles) v.update(dt);
-    collideVehicles(this.vehicles);
-    this.audio.update(dt);
-    for (const s of this.systemOrder) s.update(dt, time);
+    // Fixed substeps: at timescale 1 this is exactly one step of min(delta, 0.05) (see core/timescale.js).
+    const p = planFrame(deltaMs);
+    this.time.timeScale = p.ratio; // delayedCall/addEvent timers follow the simulation speed
+    for (let i = 0; i < p.n; i++) {
+      const dt = p.dt;
+      session.state.stats.playSeconds += dt;
+      this.player.update(dt, this.vehicles);
+      for (const v of this.vehicles) v.update(dt);
+      collideVehicles(this.vehicles);
+      this.audio.update(dt);
+      const now = simNow() - (p.n - 1 - i) * p.dt * 1000;
+      for (const s of this.systemOrder) s.update(dt, now);
+    }
     this._updatePrompt();
-    this._updateCamera(dt);
+    this._updateCamera(p.total);
     this.mapRenderer.update(this.cameras.main);
-    this.effects.update(dt, this.vehicles, this.cameras.main.worldView);
+    this.effects.update(p.total, this.vehicles, this.cameras.main.worldView);
   }
 
   _updatePrompt() {
