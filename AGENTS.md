@@ -10,6 +10,8 @@ Work is organised as **tasks**: `MissionSystem` keeps up to 4 accepted jobs (cou
 
 Crime is opt-in "game options" chosen once in `NewGameScene` when a new game starts, all OFF by default: `theft` (steal vehicles, every stolen vehicle offers an order), `criminalMissions` (Ravn and Sille) and `mayhem` (hit pedestrians and explode cars without penalty). **Police heat (1-5) and pursuit are not an option of their own**: they are active only when theft or criminalMissions is on (`pursuitEnabled()`). Old saves load with all options ON.
 
+Money rules: police and traffic fines are **bills** (`ctx.systems.economy.bills`, due in 7 days, reminders, inkasso, 30% garnish of job pay), not instant charges; quick loans (`economy.loans`) exist in every game; the `gambling`, `noSpeedingTickets` and `noRedLightTickets` options are off by default (old saves load them off). Gambling and loans are money only, never Life Quality, and all names are invented. See "Money: bills, loans, gambling" in `ARCHITECTURE.md` and run `node scripts/money-test.mjs <url>` after touching them.
+
 Always go through `src/core/options.js` (`opt('theft')`, `crimeEnabled()`, `pursuitEnabled()`, `playerMayUse(v)`); never read `state.options` ad hoc and never add crime-only behaviour without a gate. Test both modes: realistic (all off) and classic (all on).
 
 - Stack: **Phaser 3.80.1 + Vite 5**, plain ES modules (no TypeScript, no framework).
@@ -65,7 +67,7 @@ art-source/                       full-size originals (not shipped)
 - Systems talk through the event bus (`bus`, `EV`, plus the namespaced `TRAFFIC_EV`, `POLICE_EV`, `MISSION_EV` and `ECON_EV`, re-exported from `src/core/events.js`). Call another system directly only through the public methods in its header comment.
 - Always subscribe with `listen(scene, ev, fn)` so listeners are removed on scene restart.
 - Skill effects come from `ctx.systems.economy.getEffects()`. Never hard-code skill math in other systems.
-- Money changes only through `REQUEST_PAY` events handled by EconomySystem. Don't double-charge: police charges the busted fine, and economy charges the hospital bill.
+- Money changes only through `REQUEST_PAY` events handled by EconomySystem. Don't double-charge: police charges the busted fine, economy charges the hospital bill, and traffic fines go through `economy.bills.issue()` (never `REQUEST_PAY`).
 - World units are px; convert metres with `PX`. Avoid per-frame allocations in hot loops, pool sprites, and tick off-screen AI at a lower rate.
 - Texture keys are stable (`veh-<type>`, `char-<id>`, `ped-N`, `marker-*`, `icon-*`, `prop-*`). New art registers under a key in `textures.js`, with a programmatic fallback.
 - Generated sprites face **up**. `textures.js` rotates them to face +x when baking.
@@ -99,3 +101,12 @@ When several agents (Claude and/or Codex) work at the same time:
 - This folder is **not a git repository**. Don't run git commands unless the user asks for them.
 - The parent folder `/Users/lajlev/Sites/lillefar/` contains other unrelated projects. Stay inside `aarhus-express/`.
 - `node_modules/`, `dist/` and `screenshots/` are ignored, and `public/maps/aarhus.json` is generated.
+## Shared task tracking and delegation (Codex + Claude Code)
+
+This project uses **Beads (`bd`)** as the shared source of truth for coding tasks.
+
+- Before implementation or substantive investigation, create a Beads issue with `bd create "<clear task title>" -t task -p 2`, add context and acceptance criteria with `bd update <id> --description "..."`, and mark it `in_progress`. If an existing issue already covers the task, use it rather than creating a duplicate. Brief factual answers and trivial read-only lookups do not need issues.
+- For each implementation task, delegate at least one independent, bounded work or verification slice to a subagent when the current agent surface supports subagents. Prefer the cheapest available model and role that can competently complete the slice (for example, `explore` for lookup, `test-engineer` for tests, or `verifier` for review). Do not use an incapable model for a task that requires more capability. If subagents are unavailable or the task is too small or unsafe to split, note that in the Beads issue and proceed without fabricating delegation.
+- Use the Beads issue as the coordination anchor: include its ID in delegated tasks, ask subagents to report findings and evidence, and avoid concurrent edits to the same files without explicit coordination.
+- Update issue status as work proceeds; close it only after verification. Before handoff, leave a clear status and next step. Run `bd sync` only when remote synchronization is configured, available, and authorized. Never commit or push unless explicitly requested.
+- Both tools share this policy because `CLAUDE.md` imports `AGENTS.md`. Run `bd prime` after context recovery and `bd ready` to find unblocked work.

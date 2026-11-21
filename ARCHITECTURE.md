@@ -153,11 +153,14 @@ Units: world px, with `PX = 8` px per metre. Vehicle data is in metres and m/s. 
 | `police:searching` (`POLICE_EV.SEARCHING`) | `{ active, t, level, delay }` | police | HUD |
 | `police:pursuit` (`POLICE_EV.PURSUIT`) | `{ active, level, units }` | police | HUD |
 | `police:escaped` (`POLICE_EV.ESCAPED`) | `{ level }` (heat decayed to 0; not on bust/death) | police | missions (hotCar lose-the-police stage) |
-| `police:ticket` (`POLICE_EV.TICKET`) | `{ type, fine, clips, label, text, ratingPenalty, x, y, source: camera\|patrol\|auto, bike, speedKmh?, limitKmh? }`: a traffic fine was issued (already charged once via `REQUEST_PAY` reason `fine`) | traffic rules (police/traffic) | HUD (ticket popup), jobs (courier rating, taxi tip) |
+| `police:ticket` (`POLICE_EV.TICKET`) | `{ type, fine, clips, label, text, ratingPenalty, x, y, source: camera\|patrol\|auto, bike, speedKmh?, limitKmh? }`: a traffic fine was issued. It is a BILL, not a charge: extra `billId, dueDay, dueLabel, autoPaid` (see "Money: bills, loans, gambling"); nothing is charged until the bill is paid. `noSpeedingTickets` / `noRedLightTickets` suppress the event for those two offences | traffic rules (police/traffic) | HUD (ticket popup), jobs (courier rating, taxi tip) |
 | `police:licence` (`POLICE_EV.LICENCE`) | `{ clips, banned, banLeft, maxClips, reason: clip\|ban\|ban-ended\|decay }` | traffic rules | HUD, economy (dealer), Player (refuses cars while banned) |
 | `jobs:*` (`JOBS_EV`, also exported from `core/events.js`) | `signedUp {career}`, `shiftStarted {career, shift}`, `shiftEnded {career, ok, reason, pay, shift}`, `fare {job, fare, tip, km, minutes, hardBrakes}`, `fareHail {job, where}`, `busStop {index, name, served, skipped, lateness, onTime, boarded, alighted}`, `offers {offers}`, `levelUp {career, level}`, `rating {rating}` | missions/careers | job app (J), HUD |
 | `economy:*` rent | `rentDue {amount, dueDay, stage: reminder\|due}`, `rentPaid {amount, paidUntilDay, auto, late}`, `rentLate {amount, daysLate, stage: late\|warning\|evicted}`, `slept {day, hour, lqGained, healed}`, `moved {tier, name, rent}`, `week {summary}` | economy (HomeService) | HUD, home overlay |
 | `economy:*` vehicles | `vehicleBought {type, price, shop}`, `vehicleRented {type, days, price, shop, endsAt}`, `rentalEnded {type, shop}`, `vehicleRepaired {type, cost}`, `insurance {premium, paid}` | economy (VehicleService) | HUD, dealer overlay |
+| `economy:*` bills | `billIssued {bill}`, `billReminder {bill, n}` (rykker, +100 kr), `billCollection {bill}` (inkasso, +500 kr), `billPaid {bill, amount, auto, garnished?}`, `garnished {amount, of, remaining}` | economy (Bills) | HUD, tests |
+| `economy:*` loans | `loanTaken {loan}`, `loanPayment {loan, amount, n}`, `loanMissed {loan, bill}`, `loanClosed {loan, early}`, `loanAd {text}` | economy (Loans) | tests |
+| `gambling:*` | `gambling:play {game: scratch\|slot, stake, prize}`, `gambling:bet {bet}`, `gambling:settled {bet}` (`GAMBLING_EV` in `systems/gambling/GamblingSystem.js`) | GamblingSystem | tests |
 | `mission:accepted` (`MISSION_EV.ACCEPTED`) | `{ job }` | missions | HUD |
 | `mission:offerCancelled` (`OFFER_CANCELLED`) | `{ job, reason: declined\|left\|busy }` | missions | HUD |
 | `mission:target` (`TARGET`) | `{ x, y, name, action, stageIndex, job }` or `{ job: null }`: the **tracked** job's target | missions | HUD/minimap |
@@ -190,7 +193,7 @@ Add new events to `EV` with a payload comment and add a row to this table in the
 ```js
 session.state = {
   version, cityId, characterId,
-  options: { theft, criminalMissions, mayhem },      // lead only; set once at new-game time, saved (core/options.js)
+  options: { theft, criminalMissions, mayhem, infiniteMoney, noDrivingBan, noSpeedingTickets, noRedLightTickets, gambling }, // lead only; old saves load the new ones as false; set once at new-game time, saved (core/options.js)
   optionsLegacy,                                      // true for an old save loaded as all-ON (continue screen tag)
   home: { id, rentPerWeek, paidUntilDay, tier, lateSince, evicted, remindedFor }, // HomeService; 1200 kr/week, first week prepaid; lateSince = day rent became overdue (arrears, one week max), evicted locks sleep, remindedFor = day of the last reminder
   jobs: { courier, taxi, bus },                       // careers (missions/careers/shared.js defaults): courier { xp, rating, scores, decisions, done, failed, declined, earned, lastTicket }, taxi { signed, xp, shifts, fares, earned, best }, bus { signed, xp, shifts, stops, earned, punctual }
@@ -202,7 +205,8 @@ session.state = {
   job, contactCooldowns: { [contactId]: ms },         // MissionSystem (job = the TRACKED job, transient; stale clocks reset on load)
   tasks: { tracked, active: [job], events: [event], cd: { [kind]: gameMinute } }, // MissionSystem/TaskBoard (saved): persisted active jobs (orders, gigs, challenges, event tasks), running city events, event cooldowns
   missions: { levels: { [template]: completedCount } }, // MissionSystem (saved)
-  economy: { clock, cooldowns, week, lastWeek, insured, rentals: [{ uid, type, endsAt, shop }], rentalSeq, lastWakeDay }, // EconomySystem (clock = in-game minutes, new game starts Monday 08:00; week = running income/cost summary; saved)
+  economy: { clock, cooldowns, week, lastWeek, insured, rentals: [{ uid, type, endsAt, shop }], rentalSeq, lastWakeDay, bills: [{ id, kind: fine\|loan, label, amount, fees, paidPart, issuedDay, dueDay, reminders, status: open\|collection\|paid, source, collectionDay }], billSeq, loans: [{ id, principal, fee, debt, pmt, n, takenDay, nextDay, paid, missed, status: active\|closed, early }], loanSeq, loanAdDay }, // EconomySystem (clock = in-game minutes, new game starts Monday 08:00; week = running income/cost summary; saved)
+  gambling: { bets: [{ id, market: match\|event, kind, pick, label, stake, odds, placedMin, endMin, status: open\|won\|lost, payout, note }], betSeq, stats: { staked, won, plays } }, // GamblingSystem (only used with the gambling option)
   player: { x, y, health },                           // GameScene (written on save)
   stats: { deliveries, missions, gigs, stolen, busted, knockouts, earned, playSeconds }, // each module increments its own counters
   savedAt,
@@ -228,6 +232,7 @@ One owner per file. To change a file you do not own, ask its owner (or the lead)
 | **TRAFFIC RULES & POLICE:** `src/systems/PoliceSystem.js`, `src/systems/police/**` (including `police/traffic/`, the fines hook), `src/systems/TrafficSystem.js`, `src/systems/traffic/**` (AI obeys traffic lights and speed limits), `src/scenes/HUDScene.js` (speed-limit sign, fines feed, heat widget) | TRAFFIC RULES & POLICE specialist |
 | **HOME & VEHICLES:** `src/systems/EconomySystem.js`, `src/systems/economy/**` (including new `economy/vehicles/**`), `src/data/shop.js`, `src/data/home.js`, `src/data/vehicles.js` prices (not physics), `src/scenes/OverlayScene.js` (dealer/rental overlay and home overlay) | HOME & VEHICLES specialist |
 | `src/ui/**` | shared: HUD/Overlay owners may add to it; `theme.js` stays stable |
+| **MONEY:** `src/systems/economy/Bills.js`, `Loans.js`, `src/data/finance.js`, `src/systems/gambling/**`, `src/scenes/GamblingScene.js`, the Bills/Loans/Bets tabs of `JobAppScene.js` | economy specialist |
 | `ARCHITECTURE.md`, `README.md`, `AGENTS.md` | lead (specialists send their additions to the lead) |
 
 Overlaps to be careful about: `src/data/vehicles.js` physics values belong to the traffic specialist, prices to HOME & VEHICLES (split by field, ask first); `HUDScene.js` is TRAFFIC RULES & POLICE, other specialists ask them for HUD changes (events are the contract); `world/textures.js` registration lines are applied by the lead.
@@ -255,7 +260,8 @@ Art is wired in: runtime files live in `public/art/` (manifest.json, vehicles, c
 | E | enter or exit a vehicle; with theft on it also steals (the driver is ejected); with theft off only owned, rented or job vehicles work ("Not your vehicle") |
 | H | horn |
 | Esc / P | pause (controls help, Q = save and quit) |
-| B / K / M / J | shop / skills / map overlays / the phone job app (courier, taxi, bus and Tasks tabs; 1-4 or Left/Right switch tabs) |
+| B / K / M / J | shop / skills / map overlays / the phone job app (courier, taxi, bus, Tasks, **Bills**, **Loans** and, with the gambling option, **Bets** tabs; 1-7 or Left/Right switch tabs; Bills: Enter pays, A pays all; Loans: Enter takes or settles; Bets: +/- stake, Enter bets) |
+| E at a gambling pin | scratch cards (kiosks, supermarkets) or a slot machine (bars in Latinerkvarteret and Jægergårdsgade); only with the gambling option |
 | Tab | cycle the **tracked** task (arrow, HUD card and minimap line follow it) |
 | E at a gig pin | see the gig's offer (Y accepts, N refuses); works on foot and while riding |
 | Up/Down/Enter/X (map M) | select a task pin, accept or track it, abandon the selected active task; click works too |
@@ -286,7 +292,7 @@ The default game is a **realistic courier life with no crime**. Crime is opt-in 
 
 ### `src/core/options.js` (lead-only)
 
-`state.options = { theft, criminalMissions, mayhem, infiniteMoney, noDrivingBan }` (all false by default), saved per save, never changed after new-game time. The first three are the **crime options**; `infiniteMoney` and `noDrivingBan` are **comfort/cheat options** (`group: 'comfort'` in `OPTION_INFO`, shown below the Start button in NewGameScene under "COMFORT / CHEATS"). Comfort options do not count as crime: `isRealistic()` looks at the crime options only, so "Realistic courier: no crime" still shows with cheats on (the continue-screen tags list them as "Cheat: ..."). Keyboard order in NewGameScene: crime toggles, Start, then the cheats (Down x3 + Enter still starts a default game).
+`state.options = { theft, criminalMissions, mayhem, infiniteMoney, noDrivingBan, noSpeedingTickets, noRedLightTickets, gambling }` (all false by default; saves written before a key existed load it as false), saved per save, never changed after new-game time. The first three are the **crime options**; `infiniteMoney` and `noDrivingBan` are **comfort/cheat options** (`group: 'comfort'` in `OPTION_INFO`, shown below the Start button in NewGameScene under "COMFORT / CHEATS"). Comfort options do not count as crime: `isRealistic()` looks at the crime options only, so "Realistic courier: no crime" still shows with cheats on (the continue-screen tags list them as "Cheat: ..."). Keyboard order in NewGameScene: crime toggles, Start, then the cheats (Down x3 + Enter still starts a default game).
 
 | export | meaning |
 |---|---|
@@ -300,6 +306,8 @@ The default game is a **realistic courier life with no crime**. Crime is opt-in 
 | `OPTION_INFO`, `OPTION_IDS`, `REALISTIC` | UI text; tunables (`towFee` 300 kr, `towDelaySec` 6) |
 
 **Comfort options.** `infiniteMoney`: `EconomySystem.pay()` keeps the balance at 1,000,000,000 (`fmtKr` and the HUD show "kr ∞" for balances of 900 M or more); negative payments (purchases, rent, rental, insurance, fines, tow, hospital) skip the deduction but still emit `MONEY_CHANGED` and the pager lines and count in the weekly spending summary; income still adds up and counts in `stats.earned`. `noDrivingBan`: `Licence.addClips` keeps counting clips (shown, decaying as usual) and fines apply, but `banned` is always false and no `ban` licence event fires, so `Player.tryEnter` and the dealer never refuse cars.
+
+**More options.** `noSpeedingTickets` and `noRedLightTickets` (group `comfort`, shown in the COMFORT / CHEATS group of the new-game screen): the offence is detected as before but never fined: no bill, no clips, no `police:ticket`; a small "no ticket (option)" pager hint shows once per offence cooldown. `gambling` (its own group `gambling`, heading GAMBLING): GameScene builds `ctx.systems.gambling` only when it is on (null otherwise) and the J app gets the Bets tab. The new-game keyboard order is unchanged: crime toggles, START, then the grouped toggles, so Down x3 + Enter still starts a default game. Bills and quick loans are NOT options.
 
 **Legacy saves** (no `state.options`) load with all three crime options ON (and both comfort options off) and `state.optionsLegacy = true` (continue screen tag "Classic: all options on"). Brand-new games never have `optionsLegacy`.
 
@@ -397,6 +405,15 @@ One real second is one in-game minute (a day is 24 real minutes, a week 2.8 hour
 ### Vehicles (`economy/vehicles/VehicleService.js`)
 E on a shop pad opens the dealer overlay: buy (one per type, spawns owned at the door each session), rent 1-3 days (saved in `state.economy.rentals`, removed at `endsAt`), repair (12 kr per missing health point, half price while insured), weekly insurance for owned cars and scooters. Vehicles are `owned`, `rentedBy: 'player'` or `jobVehicle`; broken-down owned or rented vehicles are towed (300 kr, 6 s), broken job vehicles end the shift.
 
+### Money: bills, loans, gambling (`economy/Bills.js`, `economy/Loans.js`, `data/finance.js`, `systems/gambling/**`, `scenes/GamblingScene.js`)
+**Bills.** A traffic fine is not charged at once: `police/traffic/index.js issue()` calls `economy.bills.issue({kind:'fine', label, amount})` and emits `police:ticket` with `billId`/`dueLabel`. HUD popup: "BILL kr 400 · due Thu"; a small "BILLS kr X" line sits next to the money (orange when late, red in inkasso). Timeline (game days, `BILLS` in `data/finance.js`): due in 7 days; each missed due date is a reminder ("rykker": +100 kr fee, due again in 3 days); after 3 reminders the next missed due date goes to debt collection ("inkasso", +500 kr fee, collector "Krav & Klem Inkasso"). While any bill is in collection the collector garnishes 30% of every job payout (positive `REQUEST_PAY` whose reason does not start with `loan`, `gamble`, `bet` or `refund`), oldest debt first (`economy:garnished`). Pay in full in the J app Bills tab (Enter, A = all you can afford); the tab also lists active loans. `infiniteMoney` auto-pays a bill the moment it is issued. Not bills: the busted fine, tow fee, hospital bill and rent (rent keeps its own auto-debit / arrears flow), which stay instant.
+**Quick loans (kviklån).** "Kvikke Kasper" (invented, satirical; always available, no option, money only: no LQ effect). 1,000-10,000 kr in 1,000 steps, paid out instantly. Setup fee 149 kr + 6% is added to the debt, 30% interest per week compounding, 4 equal weekly instalments (annuity), max 2 active loans. Example: 5,000 kr -> debt 5,449 -> 4 x 2,516 = 10,064 kr, APR (ÅOP, effective annual) about 674 million percent, shown honestly with the schedule in the Loans tab. The instalment auto-debits at midnight every 7 days; if the money is missing the instalment becomes a collection bill at once (+500 kr fee) and the schedule goes on. Settle early (Enter on your loan) pays the remaining balance, no penalty. Loan money never counts as earnings or income and is never garnished. Pager ads ("Kvikke Kasper", Danish): at most ONE per in-game day, hourly chance 5% (14% when money < 300 kr, 20% when a bill is overdue).
+**Gambling** (option `gambling`; invented names, no brands; money only; stakes use category `gambling`, wins are not earnings and are never garnished). Venues come from real OSM POIs: scratch cards at kiosks and supermarkets (name matches kiosk, nærbutik, kolonial, SuperBrugsen, Letkøb, Netto, Føtex, Kvickly, Meny, købmand, 365discount; bakeries and co-ops excluded; no foreign chains), slot machines in bars within 300 m of Latinerkvarteret and Jægergårdsgade. World pins (green card, magenta machine) with E within 3.5 m opens `GamblingScene`. Maths in `gambling/games.js` (seedable `rng`, analytic RTP in the tables):
+- Scratch "Skrab & Vind" (20 / 50 / 100 kr): 6 cells, three equal symbols win; prizes 1x 14%, 2x 5%, 3x 3%, 5x 1.6%, 10x 0.4%, 20x 0.15%, 50x 0.04%. **RTP 50%** (analytic). The result is decided at purchase; closing the card early still pays.
+- Slot "Fyrtårnet" (stakes 10-200): 3 reels x 3 rows, middle payline; three equal symbols pay 2/4/8/20/50/100x (Cykel, Kaffe, Bus, Bølge, Stjerne, Krone), two Krone pay 1x. **RTP 70%**. 40% of LOSING spins are dressed as a near miss (two equal symbols, the third reel teases the missing one one row off). Symbols are drawn from primitives.
+- Betting ("Bookie Bjarne", Bets tab): AGF match win/draw/lose at x1.85 / x3.20 / x2.60 (true chances 45/25/30%, RTP 78-83%), settled with a random result when the next `match` city event ends (`tasks:eventEnded`); "an event (rain, concert, bar rush, match, Christmas market) starts within 6 h (rain 12 h)" with odds 0.78 / p where p is computed from the real schedule in `data/tasks.js` EVENT_RULES (`eventStartProb`), settled by `tasks:eventStarted`, lost at the deadline; only offered when 3% <= p <= 60%. Stakes 20-500, max 8 open bets, bets persist in `state.gambling`.
+RTP verification: `node scripts/money-test.mjs <url>` simulates 10,000 and 200,000 plays with a seeded RNG (scratch 50.3%, slot 69.8% at 200k).
+
 ### Balance (realistic but fun)
 Measured on a production build (25 random start nodes x 3 offers; bike, theft off):
 
@@ -412,5 +429,7 @@ Measured on a production build (25 random start nodes x 3 offers; bike, theft of
 
 Decisions:
 - `RULES.FINE_SCALE = 0.4`: a bike red light costs 400 kr (about 0.7-1.1 days of courier income), a car red light 800 kr (1.5-2 days at 60% duty, about 1.5 non-stop), speeding 400-1,600 kr, injury 3,200 kr. A fine always stings but money floors at 0 (no debt) and the bike plus the job app always earn again, so there is no soft-lock. Realistic raw amounts stay visible in the config for the full-scale mode (`FINE_SCALE 1`).
+- Fines are bills now: nothing is paid at the offence, so a fine no longer drains a tiny balance. The real pressure is 7 days to pay, then 100 kr per reminder (3x) and 500 kr + 30% garnish of job pay in inkasso, so ignoring a 400 kr bike fine costs about 1,200 kr by day 16 and slows income. Pay from the Bills tab while it is cheap.
+- Quick loans are deliberately a trap: 5,000 kr costs 10,064 kr in 4 weeks (about 5 days of steady courier income per 1,000 kr borrowed), and a missed instalment adds 500 kr and garnishing. Gambling returns 50% (scratch), 70% (slots) and about 78-83% (bets): the house always wins in the long run.
 - Starting money in realistic games is the character value plus 250 kr (450-650 kr): about one early fine of buffer, low enough to need work. The first week of rent is prepaid.
 - Rent 1,200 kr per week is about 25-35% of one week of steady courier play (2.8 real hours at 350-550 kr per day gives 2,450-3,850 kr), so about 1-1.5 hours of working covers it and leaves room for insurance, repairs and a van rental.

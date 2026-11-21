@@ -10,6 +10,17 @@ export const ECON_EV = {
   SLEPT: 'economy:slept', //           { day, hour, lqGained, healed }
   MOVED: 'economy:moved', //           { tier, name, rent }
   WEEK: 'economy:week', //             { summary }  a finished week (income vs costs), see getWeeklySummary()
+  // ---- bills, debt collection, quick loans (economy/Bills.js, economy/Loans.js) ----
+  BILL_ISSUED: 'economy:billIssued', //       { bill }
+  BILL_REMINDER: 'economy:billReminder', //   { bill, n }   rykker, +fee, new due date
+  BILL_COLLECTION: 'economy:billCollection', // { bill }    inkasso, +fee, garnishing starts
+  BILL_PAID: 'economy:billPaid', //           { bill, amount, auto, garnished? }
+  GARNISHED: 'economy:garnished', //          { amount, of, remaining }  the collector took a share of a job payout
+  LOAN_TAKEN: 'economy:loanTaken', //         { loan }
+  LOAN_PAYMENT: 'economy:loanPayment', //     { loan, amount, n }   weekly auto-debit succeeded
+  LOAN_MISSED: 'economy:loanMissed', //       { loan, bill }        could not pay: instalment + fee sent to collection
+  LOAN_CLOSED: 'economy:loanClosed', //       { loan, early }
+  LOAN_AD: 'economy:loanAd', //               { text }
   // ---- vehicles ----
   VEHICLE_BOUGHT: 'economy:vehicleBought', //   { type, price, shop }
   VEHICLE_RENTED: 'economy:vehicleRented', //   { type, days, price, shop, endsAt }

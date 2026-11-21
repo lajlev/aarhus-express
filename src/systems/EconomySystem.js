@@ -36,6 +36,8 @@
  *   Effect per level: driving +4% top speed/+5% handling; stamina +4% run/+6% max health;
  *   charm +6% payout/+10% tips; streetSmarts -8% heat gain (floor 0.4)/+12% heat decay;
  *   navigation +7% time limit.  See economy/skills.js SKILL_EFFECTS.
+ * Bills / loans: economy.bills (issue, pay, payAll, total, garnish, ...) and economy.loans (take, settle, quote, ...), see economy/Bills.js and
+ *   economy/Loans.js. Police fines are bills, not instant charges; job payouts are garnished 30% while a debt is in collection.
  * Clock: getClock() -> { minutes, day, hour }  (1 real second of play = 1 in-game minute).
  *
  * Events listened: EV.REQUEST_PAY, EV.PLAYER_DIED (hospital bill 150 + 10% of money, capped at money)
@@ -65,6 +67,9 @@ import { getShop } from '../data/shop.js';
 import { SKILLS, SKILL_MAX, SKILL_INFO, SKILL_COSTS, SKILL_EFFECTS, PRIMARY } from './economy/skills.js';
 import { ECON_EV, LICENCE_EV } from './economy/events.js';
 import { HomeService, MIN_PER_DAY as MPD, WEEK_DAYS, dayName } from './economy/HomeService.js';
+import { BillService } from './economy/Bills.js';
+import { LoanService } from './economy/Loans.js';
+import { NON_INCOME_PREFIXES } from '../data/finance.js';
 import { VehicleService } from './economy/vehicles/VehicleService.js';
 import { ShopMarkers } from './economy/vehicles/ShopMarkers.js';
 import { PX } from '../config.js';
@@ -95,6 +100,8 @@ export class EconomySystem {
     this._lastHour = Math.floor(st.economy.clock / 60);
     const wk = st.economy.week;
     if (!wk) st.economy.week = { startDay: Math.floor(this._lastDay / WEEK_DAYS) * WEEK_DAYS, earned: 0, spent: {} };
+    this.bills = new BillService(ctx, this);
+    this.loans = new LoanService(ctx, this);
     this.home = new HomeService(ctx, this);
     this.fleet = new VehicleService(ctx, this);
     this.activeShop = null;
@@ -106,7 +113,7 @@ export class EconomySystem {
     ctx.scene.input.keyboard?.on('keydown-E', this._onE);
     listen(ctx.scene, LICENCE_EV, (e) => this._onLicence(e));
     listen(ctx.scene, EV.OVERLAY_CLOSED, () => { ctx.player?.keys?.enter?.reset?.(); });
-    listen(ctx.scene, EV.REQUEST_PAY, ({ amount, reason }) => this.pay(amount, reason));
+    listen(ctx.scene, EV.REQUEST_PAY, ({ amount, reason }) => this._onRequestPay(amount, reason));
     listen(ctx.scene, EV.PLAYER_DIED, () => {
       const m = this.ctx.state.money;
       const bill = Math.min(m, 150 + Math.round(m * 0.1));
@@ -125,10 +132,11 @@ export class EconomySystem {
   canAfford(amount) { return this.ctx.state.money >= amount; }
 
   /** cat (optional spending category for the weekly summary): rent|insurance|vehicles|fun|other (fines/tow count as other). */
-  pay(amount, reason = '', cat) {
+  pay(amount, reason = '', cat, opts) {
     const st = this.ctx.state;
     amount = Math.round(Number(amount) || 0);
     if (!amount) return;
+    const income = opts?.income !== false; // false: loan money / refunds, not earnings (stats.earned, weekly income)
     const before = st.money;
     if (opt('infiniteMoney')) { // payments never lower the balance; income still adds up and every event/pager line stays the same
       if (st.money < 9e8) st.money = 1e9;
@@ -141,13 +149,25 @@ export class EconomySystem {
     }
     st.money = Math.max(0, before + amount);
     const delta = st.money - before;
-    if (delta > 0) st.stats.earned += delta;
+    if (delta > 0 && income) st.stats.earned += delta;
     const wk = st.economy.week;
     if (wk) {
-      if (delta > 0) wk.earned += delta;
+      if (delta > 0) { if (income) wk.earned += delta; }
       else if (delta < 0) { const c = cat || 'other'; wk.spent[c] = (wk.spent[c] || 0) - delta; }
     }
     bus.emit(EV.MONEY_CHANGED, { money: st.money, delta, reason });
+  }
+
+  /** REQUEST_PAY handler: job income (positive, not a loan/gambling reason) is garnished while a debt is in collection. */
+  _onRequestPay(amount, reason) {
+    if (amount > 0 && this.bills.collecting() && !NON_INCOME_PREFIXES.some((p) => String(reason || '').startsWith(p))) {
+      const { net, cut } = this.bills.garnish(amount);
+      if (cut > 0) {
+        this.pay(net, reason);
+        return;
+      }
+    }
+    this.pay(amount, reason);
   }
 
   // ---------------------------------------------------------------- clock
@@ -354,7 +374,7 @@ export class EconomySystem {
     const hour = Math.floor(e.clock / 60);
     const day = Math.floor(e.clock / MIN_PER_DAY);
     while (this._lastDay < day) { this._lastDay++; this._lastHour = this._lastDay * 24; this._onDay(this._lastDay); }
-    if (hour > this._lastHour) { this._lastHour = hour; this.home.onHour(); }
+    if (hour > this._lastHour) { this._lastHour = hour; this.home.onHour(); this.loans.onHour(); }
   }
 
   _onDay(d) {
@@ -369,6 +389,8 @@ export class EconomySystem {
     const weekStart = d % WEEK_DAYS === 0 && d > 0;
     if (weekStart) this._closeWeek(d);
     this.home.onDay(d);
+    this.loans.onDay(d);
+    this.bills.onDay(d);
     if (weekStart) this._insurance();
   }
 
@@ -404,7 +426,7 @@ export class EconomySystem {
     const h = this.ctx.state.home;
     return {
       weekStartDay: wk.startDay, income: wk.earned, spent, totalSpent, net: wk.earned - totalSpent,
-      upcoming: { rent: h.rentPerWeek, rentDay: h.paidUntilDay, rentLabel: dayName(h.paidUntilDay), insurance: this.fleet.insurancePremium() },
+      billsOwed: this.bills.total(), upcoming: { rent: h.rentPerWeek, rentDay: h.paidUntilDay, rentLabel: dayName(h.paidUntilDay), insurance: this.fleet.insurancePremium() },
       lastWeek: e.lastWeek || null,
     };
   }
@@ -481,7 +503,7 @@ export class EconomySystem {
     const n = this._nearest();
     if (!n) return;
     const sc = this.ctx.scene;
-    if (sc.scene.isActive('Overlay') || sc.scene.isActive('JobApp') || !sc.scene.isActive()) return;
+    if (sc.scene.isActive('Overlay') || sc.scene.isActive('JobApp') || sc.scene.isActive('Gamble') || !sc.scene.isActive()) return;
     this.ctx.player.keys.enter.reset(); // consume this E press so Player does not also enter/exit a vehicle
     if (n.kind === 'home') { bus.emit(EV.OPEN_OVERLAY, { mode: 'home' }); return; }
     this.activeShop = n.shop;

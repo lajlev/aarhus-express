@@ -44,7 +44,9 @@ await ev(() => {
     log: [], money: () => g.ctx.state.money,
   };
   window.__bus.on('police:ticket', (t) => window.T.log.push(t));
-  window.__bus.on('economy:pay', (p) => { if (p.reason === 'fine') (window.T.pays ||= []).push(p.amount); });
+  // fines are bills now: record the bill amounts issued (no REQUEST_PAY 'fine' any more) and any immediate 'fine' charge (must stay empty)
+  window.__bus.on('economy:billIssued', ({ bill }) => { if (bill.kind === 'fine') (window.T.pays ||= []).push(-bill.amount); });
+  window.__bus.on('economy:pay', (p) => { if (p.reason === 'fine') (window.T.instant ||= []).push(p.amount); });
 });
 
 // enter a car: spawn an owned hatchback by the player, teleport to it, press E
@@ -102,7 +104,7 @@ await ev(() => { window.T.g.ctx.state.money = 20000; });
 let b = back(16); await place(b.x, b.y, ap.ang, 10);
 // keep pushing speed forward for 2.5 s
 await page.keyboard.down('w'); await wait(2600); await page.keyboard.up('w');
-results.redLight = await ev(() => ({ tickets: window.T.log.map((t) => ({ type: t.type, fine: t.fine, clips: t.clips })), pays: window.T.pays, money: window.T.money() }));
+results.redLight = await ev(() => ({ tickets: window.T.log.map((t) => ({ type: t.type, fine: t.fine, clips: t.clips })), pays: window.T.pays, instantCharges: window.T.instant || [], money: window.T.money(), openBills: window.T.g.systems.economy.bills.open().map((b) => b.amount) }));
 
 // ---- again at red immediately (cooldown): should not double-fine within the cooldown
 await ev(() => { window.T.log.length = 0; });

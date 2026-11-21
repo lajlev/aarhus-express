@@ -7,18 +7,34 @@ import Phaser from 'phaser';
 import { CHARACTERS } from '../data/characters.js';
 import { getCity } from '../data/cities.js';
 import { session, createInitialState } from '../core/state.js';
-import { OPTION_INFO, noOptions, isRealistic } from '../core/options.js';
+import { OPTION_INFO, OPTION_GROUPS, noOptions, isRealistic } from '../core/options.js';
 import { C, S, txt, panel, ensureFonts } from '../ui/theme.js';
 import { GAME_W, GAME_H } from '../config.js';
 
-const ROW_W = 820, ROW_H = 58, ROW_GAP = 6, TOP = 128, HEAD_H = 28;
-// Slots (keyboard order): the crime toggles, then START, then the comfort/cheat toggles below it (so Down x3 + Enter still starts a default game).
+const ROW_W = 900, ROW_H = 46, ROW_GAP = 4, TOP = 112, HEAD_H = 22, START_H = 44;
+// Slots (keyboard order): the crime toggles, then START, then the grouped toggles below it (comfort/cheats, gambling), so Down x3 + Enter
+// still starts a default game. Option rows are in OPTION_INFO order (ungrouped first, then each group).
 const NCRIME = OPTION_INFO.filter((o) => !o.group).length;
 const START = NCRIME; // slot index of the Start button
 const SLOTS = OPTION_INFO.length + 1;
 const optOfSlot = (s) => (s < START ? s : s - 1);
-const START_Y = TOP + NCRIME * (ROW_H + ROW_GAP);
-const rowY = (opt) => (opt < NCRIME ? TOP + opt * (ROW_H + ROW_GAP) : START_Y + 50 + 16 + HEAD_H + (opt - NCRIME) * (ROW_H + ROW_GAP));
+const ROW_YS = [], HEADERS = [];
+let START_Y = 0;
+{
+  let y = TOP;
+  for (let i = 0; i < NCRIME; i++) { ROW_YS[i] = y; y += ROW_H + ROW_GAP; }
+  START_Y = y;
+  y += START_H + 12;
+  for (const grp of OPTION_GROUPS) {
+    const idx = OPTION_INFO.map((o, i) => (o.group === grp.id ? i : -1)).filter((i) => i >= 0);
+    if (!idx.length) continue;
+    HEADERS.push({ y, title: grp.title });
+    y += HEAD_H;
+    for (const i of idx) { ROW_YS[i] = y; y += ROW_H + ROW_GAP; }
+    y += 4;
+  }
+}
+const rowY = (opt) => ROW_YS[opt];
 
 export class NewGameScene extends Phaser.Scene {
   constructor() { super('NewGame'); }
@@ -39,34 +55,33 @@ export class NewGameScene extends Phaser.Scene {
       this.add.image(GAME_W / 2, GAME_H / 2, 'art:keyart:main').setDisplaySize(GAME_W, GAME_H);
       this.add.rectangle(GAME_W / 2, GAME_H / 2, GAME_W, GAME_H, 0x0a0e16, 0.86);
     }
-    txt(this, GAME_W / 2, 24, 'NEW GAME', { head: true, size: 36, color: S.gold, ox: 0.5 });
-    txt(this, GAME_W / 2, 70, `${ch.name} in ${city.name}`, { size: 20, color: S.paper, ox: 0.5 });
-    txt(this, GAME_W / 2, 100, 'Choose how the game is played. This is fixed for this save.', { size: 15, color: S.muted, ox: 0.5 });
+    txt(this, GAME_W / 2, 10, 'NEW GAME', { head: true, size: 32, color: S.gold, ox: 0.5 });
+    txt(this, GAME_W / 2, 52, `${ch.name} in ${city.name}`, { size: 20, color: S.paper, ox: 0.5 });
+    txt(this, GAME_W / 2, 80, 'Choose how the game is played. This is fixed for this save.', { size: 15, color: S.muted, ox: 0.5 });
 
     this.rows = OPTION_INFO.map((o, i) => {
       const x = GAME_W / 2 - ROW_W / 2, y = rowY(i);
       const g = this.add.graphics();
       const hit = this.add.rectangle(x + ROW_W / 2, y + ROW_H / 2, ROW_W, ROW_H, 0xffffff, 0).setInteractive({ useHandCursor: true });
-      txt(this, x + 28, y + 6, o.label, { head: true, size: 20 });
-      txt(this, x + 28, y + 31, o.desc, { size: 13, color: S.muted, wrap: ROW_W - 180 });
-      const state = txt(this, x + ROW_W - 28, y + ROW_H / 2, 'OFF', { head: true, size: 22, ox: 1, oy: 0.5 });
+      txt(this, x + 24, y + 2, o.label, { head: true, size: 18 });
+      txt(this, x + 24, y + 25, o.desc, { size: 12, color: S.muted, wrap: ROW_W - 170 });
+      const state = txt(this, x + ROW_W - 24, y + ROW_H / 2, 'OFF', { head: true, size: 20, ox: 1, oy: 0.5 });
       const slot = i < NCRIME ? i : i + 1;
       hit.on('pointerover', () => { this.index = slot; this._refresh(); });
       hit.on('pointerdown', () => { this.index = slot; this._toggle(i); });
       return { g, x, y, state, o };
     });
-    const firstComfort = OPTION_INFO.findIndex((o) => o.group);
-    if (firstComfort >= 0) txt(this, GAME_W / 2 - ROW_W / 2 + 4, rowY(firstComfort) - HEAD_H + 4, 'COMFORT / CHEATS  (not crime: the game stays "Realistic courier")', { head: true, size: 14, color: S.gold });
+    for (const h of HEADERS) txt(this, GAME_W / 2 - ROW_W / 2 + 4, h.y + 2, h.title, { head: true, size: 13, color: S.gold });
     // Start button
-    const by = START_Y + 4;
-    this.startBox = { x: GAME_W / 2 - ROW_W / 2, y: by, w: ROW_W, h: 50 };
+    const by = START_Y;
+    this.startBox = { x: GAME_W / 2 - ROW_W / 2, y: by, w: ROW_W, h: START_H };
     this.startG = this.add.graphics();
-    this.startLabel = txt(this, GAME_W / 2, by + 25, 'START', { head: true, size: 26, ox: 0.5, oy: 0.5 });
-    const hit = this.add.rectangle(GAME_W / 2, by + 25, ROW_W, 50, 0xffffff, 0).setInteractive({ useHandCursor: true });
+    this.startLabel = txt(this, GAME_W / 2, by + START_H / 2, 'START', { head: true, size: 24, ox: 0.5, oy: 0.5 });
+    const hit = this.add.rectangle(GAME_W / 2, by + START_H / 2, ROW_W, START_H, 0xffffff, 0).setInteractive({ useHandCursor: true });
     hit.on('pointerover', () => { this.index = START; this._refresh(); });
     hit.on('pointerdown', () => this._start());
 
-    this.hint = txt(this, GAME_W / 2, GAME_H - 82, '', { head: true, size: 19, ox: 0.5 });
+    this.hint = txt(this, GAME_W / 2, GAME_H - 84, '', { head: true, size: 19, ox: 0.5 });
     this.sub = txt(this, GAME_W / 2, GAME_H - 56, '', { size: 13, color: S.muted, ox: 0.5, align: 'center', wrap: 900 });
     txt(this, GAME_W / 2, GAME_H - 18, 'Up / Down to choose  ·  Space or Enter to toggle  ·  Enter on Start to play  ·  Esc back', { size: 15, color: S.muted, ox: 0.5 });
 
@@ -98,14 +113,14 @@ export class NewGameScene extends Phaser.Scene {
     this.rows.forEach((r, i) => {
       const on = this.options[r.o.id], sel = this.index === (i < NCRIME ? i : i + 1);
       r.g.clear();
-      panel(r.g, r.x, r.y, ROW_W, ROW_H, { fill: sel ? C.ink3 : C.ink2, alpha: 0.95, stroke: sel ? C.orange : C.ink3, accent: on ? (r.o.group ? C.gold : C.red) : C.ink3 });
+      panel(r.g, r.x, r.y, ROW_W, ROW_H, { fill: sel ? C.ink3 : C.ink2, alpha: 0.95, stroke: sel ? C.orange : C.ink3, accent: on ? (r.o.group ? (r.o.group === 'gambling' ? 0xe05cff : C.gold) : C.red) : C.ink3 });
       // switch
-      const sx = r.x + ROW_W - 110, sy = r.y + ROW_H / 2;
-      const onCol = r.o.group ? C.gold : C.red;
-      r.g.fillStyle(on ? onCol : C.ink, 1).fillRoundedRect(sx - 62, sy - 14, 44, 28, 14);
-      r.g.lineStyle(2, on ? onCol : C.muted, 1).strokeRoundedRect(sx - 62, sy - 14, 44, 28, 14);
-      r.g.fillStyle(C.paper, 1).fillCircle(on ? sx - 32 : sx - 48, sy, 10);
-      r.state.setText(on ? 'ON' : 'OFF').setColor(on ? (r.o.group ? S.gold : S.red) : S.muted);
+      const sx = r.x + ROW_W - 100, sy = r.y + ROW_H / 2;
+      const onCol = r.o.group ? (r.o.group === 'gambling' ? 0xe05cff : C.gold) : C.red;
+      r.g.fillStyle(on ? onCol : C.ink, 1).fillRoundedRect(sx - 62, sy - 12, 40, 24, 12);
+      r.g.lineStyle(2, on ? onCol : C.muted, 1).strokeRoundedRect(sx - 62, sy - 12, 40, 24, 12);
+      r.g.fillStyle(C.paper, 1).fillCircle(on ? sx - 34 : sx - 50, sy, 9);
+      r.state.setText(on ? 'ON' : 'OFF').setColor(on ? (r.o.group === 'gambling' ? '#E05CFF' : r.o.group ? S.gold : S.red) : S.muted);
     });
     const sel = this.index === START, b = this.startBox;
     this.startG.clear();
@@ -113,7 +128,7 @@ export class NewGameScene extends Phaser.Scene {
     this.startLabel.setColor(sel ? S.ink : S.paper);
     // crimeEnabled() reads the live session (not created yet), so decide from the local options
     const crime = this.options.theft || this.options.criminalMissions;
-    const cheats = this.options.infiniteMoney || this.options.noDrivingBan;
+    const cheats = OPTION_INFO.some((o) => o.group === 'comfort' && this.options[o.id]);
     if (isRealistic(this.options)) {
       this.hint.setText(cheats ? 'Realistic courier: no crime (with cheats)' : 'Realistic courier: no crime').setColor(S.green);
       this.sub.setText('You rent a cheap basement room and own a city bike. Earn money from honest jobs, then rent or buy better vehicles. Police only enforce traffic rules.');

@@ -8,7 +8,12 @@
 //   mayhem           hitting pedestrians and exploding cars are allowed with no rating or job penalty.
 //   infiniteMoney    (comfort/cheat) money never limits you: every payment succeeds without lowering the balance (HUD shows the infinity sign).
 //   noDrivingBan     (comfort/cheat) licence clips are still recorded and fines still apply, but a driving ban never starts.
-// The two comfort options have group 'comfort', do not count as crime and do not change "Realistic courier: no crime".
+//   noSpeedingTickets (comfort/cheat) speeding is never fined (camera vans and patrols stay, a small "no ticket (option)" hint shows).
+//   noRedLightTickets (comfort/cheat) running a red light is never fined (same hint).
+//   gambling         (group 'gambling') scratch cards at kiosks/supermarkets, slot machines in Latinerkvarteret / Jaegergaardsgade bars and a
+//                    betting tab in the phone app. Money only, never an LQ effect, does not count as crime.
+// The comfort and gambling options have a `group`, do not count as crime and do not change "Realistic courier: no crime".
+// (Bills and quick loans are NOT options: every game has them.)
 //
 // Police pursuit and heat are NOT an option of their own: they are active only when theft or
 // criminalMissions is on (pursuitEnabled()). With everything off, police only enforce traffic rules.
@@ -43,13 +48,30 @@ export const OPTION_INFO = [
     id: 'noDrivingBan', label: 'No driving ban', tag: 'Cheat: no ban', group: 'comfort',
     desc: 'Clips and fines still apply, but you are never banned from driving, renting or buying cars.',
   },
+  {
+    id: 'noSpeedingTickets', label: 'No speeding tickets', tag: 'Cheat: no speeding tickets', group: 'comfort',
+    desc: 'Speed cameras and patrols never fine you for speeding.',
+  },
+  {
+    id: 'noRedLightTickets', label: 'No red-light tickets', tag: 'Cheat: no red-light tickets', group: 'comfort',
+    desc: 'Running a red light is never fined.',
+  },
+  {
+    id: 'gambling', label: 'Gambling', tag: 'Gambling', group: 'gambling',
+    desc: 'Scratch cards at kiosks, slot machines in the bars and a betting app. The house wins. Money only, no Life Quality.',
+  },
 ];
 export const OPTION_IDS = OPTION_INFO.map((o) => o.id);
 export const CRIME_IDS = OPTION_INFO.filter((o) => !o.group).map((o) => o.id);
 export const COMFORT_IDS = OPTION_INFO.filter((o) => o.group === 'comfort').map((o) => o.id);
+/** Group headings of the new-game screen, in order (the ungrouped crime options come first, then START). */
+export const OPTION_GROUPS = [
+  { id: 'comfort', title: 'COMFORT / CHEATS  (not crime: the game stays "Realistic courier")' },
+  { id: 'gambling', title: 'GAMBLING  (money only, no Life Quality, not crime)' },
+];
 
-export const noOptions = () => ({ theft: false, criminalMissions: false, mayhem: false, infiniteMoney: false, noDrivingBan: false });
-export const allOptions = () => ({ theft: true, criminalMissions: true, mayhem: true, infiniteMoney: false, noDrivingBan: false }); // legacy saves: the old crime game, no cheats
+export const noOptions = () => Object.fromEntries(OPTION_INFO.map((o) => [o.id, false]));
+export const allOptions = () => ({ ...noOptions(), theft: true, criminalMissions: true, mayhem: true }); // legacy saves: the old crime game, no cheats
 
 /** Tunables of the realistic (mayhem-off) rules. */
 export const REALISTIC = {
@@ -83,8 +105,8 @@ export function optionTags(state) {
   if (!o) return [];
   if (state.optionsLegacy) return ['Classic: all options on'];
   const crime = OPTION_INFO.filter((i) => !i.group && o[i.id]).map((i) => i.tag);
-  const comfort = OPTION_INFO.filter((i) => i.group && o[i.id]).map((i) => i.tag);
-  return [...(crime.length ? crime : ['Realistic courier']), ...comfort];
+  const extra = OPTION_INFO.filter((i) => i.group && o[i.id]).map((i) => i.tag);
+  return [...(crime.length ? crime : ['Realistic courier']), ...extra];
 }
 
 /** May the player get into / use this vehicle? With theft off: only owned, rented or job vehicles

@@ -5,6 +5,7 @@
 // mutate their keys directly and emit an event; everyone else only reads.
 import { SAVE_PREFIX } from '../config.js';
 import { getCharacter } from '../data/characters.js';
+import { noOptions } from './options.js';
 
 export const SKILLS = ['driving', 'stamina', 'charm', 'streetSmarts', 'navigation'];
 export const SKILL_MAX = 5;
@@ -26,7 +27,7 @@ export function createInitialState(cityId, characterId, options) {
     cityId,
     characterId,
     // --- game options (lead only; see core/options.js). Set once at new-game time, persisted. ---
-    options: { theft: false, criminalMissions: false, mayhem: false, infiniteMoney: false, noDrivingBan: false, ...(options || {}) },
+    options: { ...noOptions(), ...(options || {}) },
     // --- home: the rented basement room (data in data/home.js; rent/sleep logic is the HOME specialist's) ---
     // paidUntilDay: game day (economy clock) until which the rent is paid; the first week is prepaid.
     home: { id: 'basement', rentPerWeek: DEFAULT_RENT, paidUntilDay: 7, tier: 0, lateSince: null, evicted: false, remindedFor: null },
@@ -37,7 +38,8 @@ export function createInitialState(cityId, characterId, options) {
     milestonesReached: 0,
     skills: Object.fromEntries(SKILLS.map((k) => [k, 0])),
     purchases: {}, // itemId -> count
-    economy: { clock: 8 * 60, cooldowns: {}, week: null, lastWeek: null, insured: true, rentals: [], rentalSeq: 1, lastWakeDay: null },
+    economy: { clock: 8 * 60, cooldowns: {}, week: null, lastWeek: null, insured: true, rentals: [], rentalSeq: 1, lastWakeDay: null, bills: [], billSeq: 1, loans: [], loanSeq: 1, loanAdDay: -1 },
+    gambling: { bets: [], betSeq: 1, stats: { staked: 0, won: 0, plays: 0 } }, // gambling option: bet slip + totals (empty and unused when the option is off)
     jobs: {}, // careers state (courier/taxi/bus), filled by missions/careers/shared.js
     licence: { clips: 0, banLeft: 0, decayT: 0 }, // traffic-rules driving licence
     // --- PoliceSystem ---
@@ -74,7 +76,7 @@ export function loadSave(cityId, characterId) {
     // Old saves have no `options`: they load as the legacy all-ON game (see core/options.js).
     const legacy = !data.options;
     const options = legacy ? { theft: true, criminalMissions: true, mayhem: true } : { ...base.options, ...data.options };
-    return { ...base, ...data, options, optionsLegacy: legacy || !!data.optionsLegacy, home: { ...base.home, ...data.home }, economy: { ...base.economy, ...(data.economy || {}) }, licence: { ...base.licence, ...data.licence }, skills: { ...base.skills, ...data.skills }, stats: { ...base.stats, ...data.stats }, job: null, heat: 0 };
+    return { ...base, ...data, options, optionsLegacy: legacy || !!data.optionsLegacy, home: { ...base.home, ...data.home }, economy: { ...base.economy, ...(data.economy || {}) }, gambling: { ...base.gambling, ...(data.gambling || {}), stats: { ...base.gambling.stats, ...(data.gambling?.stats || {}) } }, licence: { ...base.licence, ...data.licence }, skills: { ...base.skills, ...data.skills }, stats: { ...base.stats, ...data.stats }, job: null, heat: 0 };
   } catch (err) {
     console.warn('loadSave failed', err);
     return null;

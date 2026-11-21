@@ -8,6 +8,7 @@ import { GameScene } from './scenes/GameScene.js';
 import { HUDScene } from './scenes/HUDScene.js';
 import { OverlayScene } from './scenes/OverlayScene.js';
 import { JobAppScene } from './scenes/JobAppScene.js';
+import { GamblingScene } from './scenes/GamblingScene.js';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -18,7 +19,7 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   render: { antialias: true, roundPixels: false },
   fps: { target: 60 },
-  scene: [BootScene, CitySelectScene, CharacterSelectScene, NewGameScene, GameScene, HUDScene, OverlayScene, JobAppScene],
+  scene: [BootScene, CitySelectScene, CharacterSelectScene, NewGameScene, GameScene, HUDScene, OverlayScene, JobAppScene, GamblingScene],
 });
 
 // Handy for debugging and for the headless smoke test.

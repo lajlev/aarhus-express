@@ -6,6 +6,7 @@ import { GameAudio } from '../audio/GameAudio.js';
 import { PX } from '../config.js';
 import { bus, EV, listen, pager } from '../core/events.js';
 import { opt, REALISTIC } from '../core/options.js';
+import { GamblingSystem } from '../systems/gambling/GamblingSystem.js';
 import { session, writeSave } from '../core/state.js';
 import { clamp, lerp, pick } from '../core/math.js';
 import { getCity } from '../data/cities.js';
@@ -110,8 +111,9 @@ export class GameScene extends Phaser.Scene {
     sys.police = new PoliceSystem(this.ctx);
     sys.missions = new MissionSystem(this.ctx);
     sys.traffic = new TrafficSystem(this.ctx);
+    sys.gambling = opt('gambling') ? new GamblingSystem(this.ctx) : null; // gambling option: scratch cards, slots, betting (money only)
     this.systems = sys;
-    this.systemOrder = [sys.traffic, sys.police, sys.missions, sys.economy];
+    this.systemOrder = [sys.traffic, sys.police, sys.missions, sys.economy, ...(sys.gambling ? [sys.gambling] : [])];
 
     this.audio = new GameAudio(this.ctx);
     if (startAtHome) this._spawnOwnedAtHome(home); else this._spawnStarterVehicle(free.x, free.y);
@@ -301,10 +303,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   openOverlay(mode) {
-    if (this.scene.isActive('Overlay') || this.scene.isActive('JobApp')) return;
+    if (this.scene.isActive('Overlay') || this.scene.isActive('JobApp') || this.scene.isActive('Gamble')) return;
     this.scene.setVisible(false, 'HUD'); // HUD restores itself on OVERLAY_CLOSED
     this.scene.pause();
-    this.scene.launch(mode === 'jobs' ? 'JobApp' : 'Overlay', { mode });
+    this.scene.launch(mode === 'jobs' ? 'JobApp' : mode === 'gamble' ? 'Gamble' : 'Overlay', { mode });
   }
 
   save() {

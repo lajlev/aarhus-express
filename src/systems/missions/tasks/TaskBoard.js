@@ -414,7 +414,7 @@ export class TaskBoard {
 
   _blocked() {
     const sc = this.ctx.scene;
-    return sc.scene.isActive('Overlay') || sc.scene.isActive('JobApp') || !sc.scene.isActive();
+    return sc.scene.isActive('Overlay') || sc.scene.isActive('JobApp') || sc.scene.isActive('Gamble') || !sc.scene.isActive();
   }
 
   _pressE() {

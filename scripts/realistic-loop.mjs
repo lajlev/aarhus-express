@@ -121,7 +121,11 @@ const tickets = await G(() => window.__t.map((t) => ({ type: t.type, fine: t.fin
 const red = tickets.find((t) => t.type === 'redLight');
 await shot('08-ticket-popup');
 check('red light: one fine, bike fine 400 kr (1,000 x FINE_SCALE 0.4)', !!red && red.fine === 400 && red.bike, tickets);
-check('money dropped by the fine(s)', before.money - after.money >= 400, { before: before.money, after: after.money });
+// fines are bills now: nothing is charged at the moment of the offence; the charge happens when the bill is paid
+const billsNow = await G(() => window.__game.scene.getScene('Game').ctx.systems.economy.bills.open().map((b) => ({ id: b.id, a: b.amount, k: b.kind, due: b.dueDay })));
+check('red light: the 400 kr fine is an OPEN bill (due in 7 days) and money was not charged yet', billsNow.some((b) => b.a === 400 && b.k === 'fine' && b.due === 7) && after.money >= before.money, { billsNow, before: before.money, after: after.money });
+const payRes = await G(() => { const e = window.__game.scene.getScene('Game').ctx.systems.economy; const m0 = window.__game.scene.getScene('Game').ctx.state.money; const owed = e.bills.total(); const n = e.bills.payAll(); return { n, owed, charged: m0 - window.__game.scene.getScene('Game').ctx.state.money }; });
+check('paying the bill(s) charges them in full (delayed charge)', payRes.n >= 1 && payRes.charged === payRes.owed && payRes.owed >= 400, payRes);
 check('courier rating dropped (about -0.04 per penalty point 2)', after.rating < before.rating, { before: before.rating, after: after.rating });
 await press('j'); await wait(500); await shot('09-jobapp-after-fine'); await press('Escape'); await wait(300);
 

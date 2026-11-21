@@ -16,13 +16,18 @@
 //   banDrive   driving a car while banned: 3,000 kr and +60 s of ban
 // Pedestrians are never fined. Pedal bikes get no speeding / pavement / clips.
 //
-// Charging: bus.emit(EV.REQUEST_PAY, { amount: -fine, reason: 'fine' }) exactly once per offence (per-type cooldowns), then
-//   bus.emit(POLICE_EV.TICKET, { type, fine, clips, label, text, ratingPenalty, x, y, source, bike, speedKmh?, limitKmh? })
-//   and a pager line from "Politiet".
+// Charging: a fine is a BILL, not an instant charge. issue() creates it in the economy ledger (ctx.systems.economy.bills.issue, kind
+//   'fine', due in 7 days; reminders, fees and debt collection follow, see systems/economy/Bills.js) exactly once per offence
+//   (per-type cooldowns), then
+//   bus.emit(POLICE_EV.TICKET, { type, fine, clips, label, text, ratingPenalty, x, y, source, bike, billId, dueDay, dueLabel, autoPaid, speedKmh?, limitKmh? })
+//   and a pager line from "Politiet". With infiniteMoney the bill is paid the moment it is issued (autoPaid).
+//   Options noSpeedingTickets / noRedLightTickets: those two offences are never fined (no bill, no clip, no TICKET); only a small
+//   "no ticket (option)" pager hint appears, once per offence cooldown.
 // Licence: state.licence = { clips, banLeft, decayT }. Three clips = BAN_SECONDS driving ban on cars (bikes allowed). Enforcing the ban on
 //   ENTERING cars is a change request for Player.js (see ARCHITECTURE notes); until then driving a car while banned is fined (banDrive).
 import { listen, bus, EV, pager, TRAFFIC_EV } from '../../../core/events.js';
 import { opt } from '../../../core/options.js';
+import { dueLabel } from '../../economy/Bills.js';
 import { PX } from '../../../config.js';
 import { fmtKr } from '../../../ui/theme.js';
 import { POLICE_EV } from '../tuning.js';
@@ -54,9 +59,11 @@ export function createTrafficRules(ctx) {
     const motor = !!(v && !v.def.bike); // the licence applies to cars (not bikes / scooters)
     const fine = Math.round(o.fine * R.FINE_SCALE);
     const clips = motor ? (o.clips || 0) : 0;
-    bus.emit(EV.REQUEST_PAY, { amount: -fine, reason: 'fine' });
-    const text = `Fine ${fmtKr(fine)}: ${o.label}`;
+    const bill = ctx.systems.economy.bills.issue({ kind: 'fine', label: o.label, amount: fine, source: 'Politiet' });
+    const due = dueLabel(bill.dueDay);
+    const text = bill.status === 'paid' ? `Fine ${fmtKr(fine)} (paid automatically): ${o.label}` : `Bill ${fmtKr(fine)}, due ${due}: ${o.label}`;
     const ticket = {
+      billId: bill.id, dueDay: bill.dueDay, dueLabel: due, autoPaid: bill.status === 'paid',
       type, fine, clips, label: o.label, text, ratingPenalty: o.rating || 0, source: o.source || 'auto', bike,
       x: o.x ?? ctx.player.px, y: o.y ?? ctx.player.py, speedKmh: o.speedKmh, limitKmh: o.limitKmh,
     };
@@ -85,6 +92,7 @@ export function createTrafficRules(ctx) {
           if (Math.abs(lat) > ap.w / 2 + PX) continue;
           if (sig.redAge(ap) < R.RED_GRACE) continue;
           cd.red = R.RED_COOLDOWN;
+          if (opt('noRedLightTickets')) { pager('Red light: no ticket (option).', 'info', 'Politiet'); break; }
           const bike = v.def.cyclist;
           issue('redLight', { fine: bike ? R.RED_BIKE_FINE : R.RED_FINE, clips: R.RED_CLIPS, label: bike ? 'Cycled through a red light' : 'Ran a red light', rating: RATING.redLight, source: 'auto' });
           break;
@@ -108,6 +116,7 @@ export function createTrafficRules(ctx) {
     const tier = R.SPEED_TIERS.find((t) => over <= t[0]);
     cd.speed = R.SPEED_COOLDOWN;
     if (cam) { cam.cd = R.CAMERA_COOLDOWN; vans.flash(cam); }
+    if (opt('noSpeedingTickets')) { pager('Speeding: no ticket (option).', 'info', 'Politiet'); return; }
     issue('speeding', { fine: tier[1], clips: tier[2], label: `Speeding: ${Math.round(kmh)} km/h in a ${limit} zone`, rating: RATING.speeding, source, speedKmh: Math.round(kmh), limitKmh: limit });
   }
 

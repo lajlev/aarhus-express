@@ -66,6 +66,7 @@ export class HUDScene extends Phaser.Scene {
     panel(g, 16, 16, 262, 118);
     this.icMoney = icon(sc, 'money', 40, 40, 26);
     this.moneyText = txt(sc, 62, 22, '', { head: true, size: 30 });
+    this.billText = txt(sc, 268, 22, '', { head: true, size: 13, color: S.gold, ox: 1 }); // open bills (red once overdue)
     // LQ
     txt(sc, 32, 62, 'LQ', { head: true, size: 15, color: S.orange });
     this.lqText = txt(sc, 56, 61, '', { size: 14, color: S.paper });
@@ -463,6 +464,9 @@ export class HUDScene extends Phaser.Scene {
     if (Math.abs(st.money - this.shownMoney) < 1) this.shownMoney = st.money;
     this.moneyText.setText(fmtKr(this.shownMoney));
     this.moneyText.setScale(time < (this.moneyPulse || 0) ? 1.08 : 1);
+    const bills = this.gameScene.systems?.economy?.bills;
+    const owe = bills ? bills.total() : 0;
+    this.billText.setText(owe > 0 ? `BILLS ${fmtKr(owe)}` : '').setColor(bills?.collecting() ? S.red : bills?.overdue() ? S.orange : S.gold);
     // LQ
     const eco = this.gameScene.systems?.economy;
     const pr = eco?.getLQProgress?.();
@@ -676,7 +680,7 @@ export class HUDScene extends Phaser.Scene {
     const w = 460, h = 78, x0 = GAME_W / 2 - w / 2, y0 = 112 + slide;
     panel(tg, x0, y0, w, h, { r: 10, accent: C.blue, stroke: C.blue, alpha: 0.94 });
     tg.fillStyle(C.blue, 1).fillRoundedRect(x0 + w - 74, y0 + 8, 64, 18, 5);
-    this.ticketHead.setText(`FINE ${fmtKr(t.fine)}`).setPosition(x0 + 18, y0 + 6);
+    this.ticketHead.setText(t.autoPaid ? `FINE ${fmtKr(t.fine)} · paid` : t.dueLabel ? `BILL ${fmtKr(t.fine)} · due ${t.dueLabel}` : `FINE ${fmtKr(t.fine)}`).setPosition(x0 + 18, y0 + 6);
     this.ticketSub.setText(t.label).setPosition(x0 + 18, y0 + 44);
     this.ticketTag.setText(t.source === 'camera' ? 'CAMERA' : t.source === 'patrol' ? 'PATROL' : 'POLICE').setColor(S.ink).setPosition(x0 + w - 18, y0 + 11);
     this.ticketClip.setText(t.clips ? `+${t.clips} CLIP${t.clips > 1 ? 'S' : ''}` : '').setPosition(x0 + w - 14, y0 + 52);

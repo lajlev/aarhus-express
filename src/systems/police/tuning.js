@@ -13,7 +13,7 @@ export const POLICE_EV = {
   /** { level } heat decayed to zero (player escaped; not emitted on bust or death) */
   ESCAPED: 'police:escaped',
   /** { type, fine, clips, label, text, ratingPenalty, x, y, speedKmh?, limitKmh?, source: 'camera'|'patrol'|'auto', bike } a traffic fine was issued
-   *  (already charged once via REQUEST_PAY reason 'fine'). JOBS may listen to dock the courier rating by `ratingPenalty` (0 for minor offences). */
+   *  + billId, dueDay, dueLabel, autoPaid: the fine is a BILL in the economy ledger (due in 7 days), not charged yet; autoPaid with infiniteMoney. JOBS may listen to dock the courier rating by `ratingPenalty` (0 for minor offences). */
   TICKET: 'police:ticket',
   /** { clips, banned, banLeft, maxClips, reason: 'clip'|'ban'|'ban-ended'|'decay' } driving licence changed ("klip i koerekortet") */
   LICENCE: LICENCE_EV,
