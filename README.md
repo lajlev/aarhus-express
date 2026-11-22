@@ -64,3 +64,7 @@ node scripts/game-audio-test.mjs
 ```
 
 These use mocked media/Web Audio APIs; they do not prove live stream availability, sound quality or browser autoplay behavior. Browser listening, visual layout and performance play-tests remain required.
+
+## Credits
+
+Made by [lillefar.dk](https://lillefar.dk/side-quests/aarhus-express). The title screen shows a clickable "Made by lillefar.dk" credit (bottom-left, opens the side quest page in a new tab), and `index.html` carries a crawlable link plus `<meta name="author">`.

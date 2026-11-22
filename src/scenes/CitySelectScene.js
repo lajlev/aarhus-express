@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { CITIES } from '../data/cities.js';
 import { FONT, GAME_W, GAME_H, TITLE } from '../config.js';
 
+const CREDIT_URL = 'https://lillefar.dk/side-quests/aarhus-express';
+
 export class CitySelectScene extends Phaser.Scene {
   constructor() { super('CitySelect'); }
 
@@ -28,6 +30,8 @@ export class CitySelectScene extends Phaser.Scene {
     this.add.text(GAME_W / 2, GAME_H - 60, 'Left / Right to choose  ·  Enter to start', { fontFamily: FONT, fontSize: '18px', color: '#7d8799' }).setOrigin(0.5);
     this.add.text(GAME_W - 12, GAME_H - 10, 'Map data © OpenStreetMap contributors', { fontFamily: FONT, fontSize: '12px', color: '#5b6474' }).setOrigin(1, 1);
 
+    this._credit();
+
     const kb = this.input.keyboard;
     kb.on('keydown-LEFT', () => this._move(-1));
     kb.on('keydown-RIGHT', () => this._move(1));
@@ -36,6 +40,18 @@ export class CitySelectScene extends Phaser.Scene {
     kb.on('keydown-ENTER', () => this._choose());
     kb.on('keydown-SPACE', () => this._choose());
     this._refresh();
+  }
+
+  // Clickable credit, bottom-left (mouse only, no keyboard focus, so it never affects key navigation).
+  _credit() {
+    const base = '#7d8799', hover = '#f2b134';
+    const t = this.add.text(12, GAME_H - 10, 'Made by lillefar.dk', { fontFamily: FONT, fontSize: '14px', color: base }).setOrigin(0, 1);
+    t.setInteractive({ useHandCursor: true });
+    t.on('pointerover', () => t.setColor(hover).setStyle({ fontStyle: 'bold' }));
+    t.on('pointerout', () => t.setColor(base).setStyle({ fontStyle: 'normal' }));
+    t.on('pointerdown', () => {
+      try { window.open(CREDIT_URL, '_blank', 'noopener'); } catch (e) { /* ignore */ }
+    });
   }
 
   _backdrop() {

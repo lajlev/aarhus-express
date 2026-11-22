@@ -3,15 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="author" content="lillefar.dk" />
     <title>Lillefar: Aarhus Express</title>
     <style>
       html, body { margin: 0; height: 100%; background: #101318; overflow: hidden; }
       #game { width: 100%; height: 100%; }
       canvas { display: block; }
+      /* Crawler/no-JS credit link: visually hidden so it never shifts the canvas or scrolls the page. */
+      .credit { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     </style>
   </head>
   <body>
     <div id="game"></div>
+    <p class="credit">Aarhus Express is made by <a href="https://lillefar.dk/side-quests/aarhus-express">lillefar.dk</a></p>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
