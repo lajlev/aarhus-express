@@ -1,12 +1,9 @@
-body.has-mobile-controls {
-  --touch-height: calc(222px + env(safe-area-inset-bottom, 0px));
-  overscroll-behavior: none;
-}
+body.has-mobile-controls { overscroll-behavior: none; }
 body.has-mobile-controls #game {
   position: fixed;
   top: env(safe-area-inset-top, 0px);
   right: env(safe-area-inset-right, 0px);
-  bottom: var(--touch-height);
+  bottom: env(safe-area-inset-bottom, 0px);
   left: env(safe-area-inset-left, 0px);
   width: auto;
   height: auto;
@@ -15,14 +12,7 @@ body.has-mobile-controls #game {
   box-sizing: border-box;
   position: fixed;
   z-index: 10;
-  inset: auto 0 0;
-  height: var(--touch-height);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 22px max(8px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
-  background: #101318;
+  pointer-events: none;
   color: #e8edf5;
   font: 12px 'Trebuchet MS', sans-serif;
   user-select: none;
@@ -34,28 +24,31 @@ body.has-mobile-controls #game {
   min-width: 44px;
   min-height: 44px;
   padding: 4px;
-  border: 1px solid #566379;
+  border: 1px solid #aebbd099;
   border-radius: 10px;
-  background: #222d40;
+  background: #172237b8;
   color: #f4f6fa;
+  text-shadow: 0 1px 2px #000;
   font: bold 12px 'Trebuchet MS', sans-serif;
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
   pointer-events: auto;
 }
 #mobile-controls button.is-held,
-#mobile-controls button:active { background: #eab04b; color: #101318; }
+#mobile-controls button:active { background: #eab04b; color: #101318; text-shadow: none; }
 #mobile-controls button:focus-visible { outline: 3px solid #f2b134; outline-offset: 2px; }
+/* Keep the explanatory text available to assistive technology, not over the HUD. */
 .mobile-controls-hint {
   position: absolute;
-  inset: 0 8px auto;
-  margin: 4px 0;
-  color: #aebbd0;
-  text-align: center;
-  font-size: 11px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 .mobile-controls-pad {
-  flex: 0 0 140px;
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
   display: grid;
   grid-template-columns: repeat(3, 44px);
   grid-template-rows: repeat(3, 44px);
@@ -67,44 +60,45 @@ body.has-mobile-controls #game {
 .mobile-controls-pad [data-key='ArrowDown'] { grid-column: 2; grid-row: 3; }
 .mobile-controls-pad [data-key='ArrowRight'] { grid-column: 3; grid-row: 2; }
 .mobile-controls-actions {
-  width: min(48%, 280px);
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(44px, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(2, 60px);
+  gap: 6px;
+}
+.mobile-controls-menu {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  width: 60px;
+  z-index: 3;
+}
+.mobile-controls-dismiss {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #080e1955;
+  pointer-events: auto;
+  touch-action: none;
 }
 .mobile-controls-extra {
+  box-sizing: border-box;
   position: absolute;
-  bottom: calc(100% + 6px);
-  right: max(8px, env(safe-area-inset-right, 0px));
-  max-width: calc(100vw - 32px);
-  padding: 8px;
+  z-index: 2;
+  top: 52px;
+  right: 8px;
+  width: min(304px, calc(100% - 16px));
+  max-height: calc(100% - 56px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
   border: 1px solid #566379;
   border-radius: 12px;
-  background: #101318;
+  background: #101318f2;
   display: grid;
-  grid-template-columns: repeat(3, minmax(60px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(4, minmax(44px, 1fr));
+  gap: 4px;
   pointer-events: auto;
 }
 #mobile-controls [hidden] { display: none; }
-@media (orientation: landscape) {
-  body.has-mobile-controls #game {
-    left: calc(156px + env(safe-area-inset-left, 0px));
-    right: calc(194px + env(safe-area-inset-right, 0px));
-    bottom: env(safe-area-inset-bottom, 0px);
-  }
-  #mobile-controls {
-    inset: 0;
-    height: auto;
-    align-items: flex-end;
-    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
-    background: transparent;
-    pointer-events: none;
-  }
-  .mobile-controls-actions { width: 180px; }
-  .mobile-controls-hint { inset: auto 200px 8px 160px; }
-  .mobile-controls-extra {
-    bottom: max(16px, env(safe-area-inset-bottom, 0px));
-    right: calc(194px + env(safe-area-inset-right, 0px));
-  }
-}

@@ -25,7 +25,10 @@ export function installMobileControls(game) {
   extra.className = 'mobile-controls-extra';
   extra.id = 'mobile-controls-extra';
   extra.hidden = true;
-  root.append(hint, pad, actions, extra);
+  const dismiss = document.createElement('div');
+  dismiss.className = 'mobile-controls-dismiss';
+  dismiss.hidden = true;
+  root.append(hint, pad, actions, dismiss, extra);
   document.body.append(root);
   document.body.classList.add('has-mobile-controls');
 
@@ -36,6 +39,8 @@ export function installMobileControls(game) {
   const cleanups = [];
   let context = '';
   let destroyed = false;
+  let layoutPending = true;
+  let menuToggle = null;
 
   function listen(target, name, fn, options) {
     target.addEventListener(name, fn, options);
@@ -89,6 +94,12 @@ export function installMobileControls(game) {
     touched.clear();
   }
 
+  function setMenu(open) {
+    extra.hidden = !open;
+    dismiss.hidden = !open;
+    menuToggle?.setAttribute('aria-expanded', String(open));
+  }
+
   function button(key, label, title = label) {
     const el = document.createElement('button');
     el.type = 'button';
@@ -106,7 +117,10 @@ export function installMobileControls(game) {
       if (!wasHeld && !physical.has(keyInfo(key)[0])) emit('keydown', key);
     });
     for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-      el.addEventListener(name, (event) => release(event.pointerId));
+      el.addEventListener(name, (event) => {
+        release(event.pointerId);
+        if (name === 'pointerup' && extra.contains(el)) setMenu(false);
+      });
     }
     // Assistive activation / keyboard-generated clicks do not have a pointerdown.
     el.addEventListener('click', (event) => {
@@ -114,6 +128,7 @@ export function installMobileControls(game) {
       touched.add(keyInfo(key)[0]);
       emit('keydown', key);
       pendingRelease.add(key);
+      if (extra.contains(el)) setMenu(false);
     });
     return el;
   }
@@ -136,18 +151,20 @@ export function installMobileControls(game) {
     reset();
     context = next;
     root.dataset.scene = active;
-    extra.hidden = true;
+    setMenu(false);
+    menuToggle?.remove();
+    menuToggle = null;
     actions.replaceChildren();
     extra.replaceChildren();
     const playing = active === 'Game';
     hint.textContent = playing ? (vehicle ? '▲ accelerate · ▼ reverse · ◀ ▶ steer' : 'Hold arrows to walk · hold Run to sprint') : 'Arrows to choose · Confirm to select';
     const main = playing ? [
       ['e', 'Use', 'Interact / enter or exit vehicle'],
-      [vehicle ? ' ' : 'Shift', vehicle ? 'Brake' : 'Run'], ['h', 'Horn'],
-      ['y', 'Accept'], ['n', 'Decline'], ['Tab', 'Task', 'Track next task'],
-      ['j', 'Jobs'], ['m', 'Map'], ['p', 'Pause'],
+      [vehicle ? ' ' : 'Shift', vehicle ? 'Brake' : 'Run'],
     ] : [['Enter', 'Confirm'], ['Escape', 'Back']];
     const more = playing ? [
+      ['j', 'Jobs'], ['m', 'Map'], ['p', 'Pause'], ['Tab', 'Task', 'Track next task'],
+      ['y', 'Accept'], ['n', 'Decline'], ['h', 'Horn'],
       ['b', 'Shop'], ['k', 'Skills'], ['r', 'Radio'], ['t', 'Station'], ['v', 'Mute'],
     ] : active === 'JobApp' ? [
       ['x', 'Abandon'], ['d', 'Decline'], ['a', 'Pay all'], ['+', 'Stake +'], ['-', 'Stake −'],
@@ -159,15 +176,16 @@ export function installMobileControls(game) {
     if (more.length) {
       const toggle = document.createElement('button');
       toggle.type = 'button';
-      toggle.textContent = 'More';
+      toggle.textContent = 'Menu';
+      toggle.className = 'mobile-controls-menu';
+      menuToggle = toggle;
       toggle.setAttribute('aria-expanded', 'false');
       toggle.setAttribute('aria-controls', extra.id);
       toggle.addEventListener('click', () => {
         reset();
-        extra.hidden = !extra.hidden;
-        toggle.setAttribute('aria-expanded', String(!extra.hidden));
+        setMenu(extra.hidden);
       });
-      actions.append(toggle);
+      root.append(toggle);
       for (const args of more) extra.append(button(...args));
     }
   }
@@ -176,14 +194,40 @@ export function installMobileControls(game) {
   listen(window, 'keyup', (event) => { if (event.isTrusted) physical.delete(event.keyCode); }, true);
   listen(window, 'blur', () => { physical.clear(); reset(); });
   listen(document, 'visibilitychange', () => { if (document.hidden) { physical.clear(); reset(); } });
-  listen(window, 'resize', reset);
-  listen(window, 'orientationchange', reset);
+  function resized() {
+    reset();
+    setMenu(false);
+    layoutPending = true;
+  }
+  listen(window, 'resize', resized);
+  listen(window, 'orientationchange', resized);
+  game.scale.on('resize', resized);
+  // Consume the dismissal gesture here, never forward it to the canvas below.
+  listen(dismiss, 'pointerdown', (event) => {
+    event.preventDefault();
+    dismiss.setPointerCapture(event.pointerId);
+  });
+  listen(dismiss, 'pointerup', (event) => {
+    event.preventDefault();
+    setMenu(false);
+  });
   listen(root, 'contextmenu', (event) => event.preventDefault());
   // Let even very short taps reach one simulation update before keyup clears JustDown.
-  function afterStep() { render(); flushReleases(); }
+  function afterStep() {
+    if (layoutPending && game.canvas) {
+      const rect = game.canvas.getBoundingClientRect();
+      root.style.left = `${rect.left}px`;
+      root.style.top = `${rect.top}px`;
+      root.style.width = `${rect.width}px`;
+      root.style.height = `${rect.height}px`;
+      layoutPending = false;
+    }
+    render();
+    flushReleases();
+  }
   game.events.on('poststep', afterStep);
   render();
-  // CSS changes the available canvas area without modifying the game's logical resolution.
+  // Fit the game to the full safe viewport; controls follow its rendered canvas.
   if (game.isBooted) game.scale.refresh();
 
   function destroy() {
@@ -191,6 +235,7 @@ export function installMobileControls(game) {
     destroyed = true;
     game.events.off('poststep', afterStep);
     game.events.off('destroy', destroy);
+    game.scale.off('resize', resized);
     for (const cleanup of cleanups) cleanup();
     root.remove();
     document.body.classList.remove('has-mobile-controls');
