@@ -256,6 +256,8 @@ Art is wired in: runtime files live in `public/art/` (manifest.json, vehicles, c
 
 ## Controls
 
+`ui/MobileControls.js` installs a touch-only DOM control surface from `main.js`, with safe-area layout in `ui/mobile-controls.css`. It routes touch through the existing keyboard bindings (including key codes for Phaser and `code` for app menus), so gameplay permissions, actions and money rules have one owner. Multi-pointer holds are released on cancellation, focus loss, visibility changes, resizing and scene transitions; paused scene keys are cleared to avoid stuck movement. The canvas retains its 1280×720 logical size, fitted into the remaining space. No save fields or bus events are added. `scripts/mobile-controls-test.mjs` covers touch-only menu startup, simultaneous driving inputs, release paths, mobile layouts and desktop detection.
+
 | key | action |
 |---|---|
 | W/A/S/D or arrows | walk, or accelerate/steer/brake-reverse |

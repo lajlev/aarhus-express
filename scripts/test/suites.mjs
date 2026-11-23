@@ -33,6 +33,8 @@ export const suites = [
   { name: 'unit-sfx', file: 'scripts/sound-effects-test.mjs', tags: ['quick', 'full', 'unit'], covers: ['src/audio/SoundEffects.js'], timeoutMs: 30000 },
   { name: 'unit-walking', file: 'scripts/walking-visual-test.mjs', tags: ['quick', 'full', 'unit'], covers: ['src/entities/WalkingVisual.js', 'src/entities/Player.js'], timeoutMs: 30000 },
 
+  { name: 'mobile-controls', file: 'scripts/mobile-controls-test.mjs', server: true, tags: ['full', 'mobile'], covers: ['src/ui/MobileControls.js', 'src/ui/mobile-controls.css', 'scripts/mobile-controls-test.mjs', 'src/main.js', 'index.html'], maxScale: 1, timeoutMs: 120000 },
+
   // ---- area suites
   { name: 'realistic-loop', file: 'scripts/realistic-loop.mjs', server: true, args: ['{url}', '{shots}'], tags: ['full', 'realistic', 'economy', 'missions'], covers: [...CORE, ...ECON, ...MISSIONS, 'src/systems/missions/**', 'src/data/home.js', 'src/scenes/JobAppScene.js', 'src/scenes/HUDScene.js', 'src/scenes/NewGameScene.js'], maxScale: 10, timeoutMs: 360000 },
   { name: 'tasks', file: 'scripts/tasks-test.mjs', server: true, args: ['{url}', '{shots}'], tags: ['full', 'realistic', 'missions'], covers: [...MISSIONS, 'src/ui/taskIcons.js', 'src/scenes/HUDScene.js', 'src/scenes/JobAppScene.js', 'src/scenes/OverlayScene.js'], maxScale: 10, timeoutMs: 300000 },

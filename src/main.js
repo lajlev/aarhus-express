@@ -10,6 +10,7 @@ import { OverlayScene } from './scenes/OverlayScene.js';
 import { JobAppScene } from './scenes/JobAppScene.js';
 import { installTimeScale } from './core/timescale.js';
 import { GamblingScene } from './scenes/GamblingScene.js';
+import { installMobileControls } from './ui/MobileControls.js';
 
 installTimeScale(); // test speed mode: ?timescale=N / window.__setTimeScale(n)
 
@@ -27,3 +28,4 @@ const game = new Phaser.Game({
 
 // Handy for debugging and for the headless smoke test.
 window.__game = game;
+installMobileControls(game);
